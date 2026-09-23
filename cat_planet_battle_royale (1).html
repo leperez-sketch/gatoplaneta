@@ -1,0 +1,1927 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Gato Planeta - Battle Royale</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- PeerJS for WebRTC P2P multiplayer -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <!-- QRCode.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Press+Start+2P&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Fredoka', sans-serif;
+            background-color: #0f172a;
+            color: #ffffff;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+        .font-pixel {
+            font-family: 'Press Start 2P', cursive;
+        }
+        @keyframes pulse-glow {
+            0%, 100% { transform: scale(1); filter: drop-shadow(0 0 15px rgba(234, 179, 8, 0.8)); }
+            50% { transform: scale(1.05); filter: drop-shadow(0 0 25px rgba(236, 72, 153, 0.9)); }
+        }
+        .meow-text {
+            animation: pulse-glow 0.8s infinite ease-in-out;
+            background: linear-gradient(180deg, #ffe600 0%, #ff0055 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        @keyframes speed-banner-anim {
+            0% { transform: translateY(-100%) scale(0.8); opacity: 0; }
+            15% { transform: translateY(0) scale(1.1); opacity: 1; }
+            85% { transform: translateY(0) scale(1); opacity: 1; }
+            100% { transform: translateY(-100%) scale(0.8); opacity: 0; }
+        }
+        .animate-speed-banner {
+            animation: speed-banner-anim 2.5s forwards ease-out;
+        }
+        .btn-touch {
+            touch-action: none;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            transition: transform 0.05s ease, background-color 0.1s ease;
+        }
+        .btn-touch:active {
+            transform: scale(0.92);
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #f59e0b;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col justify-between items-center relative overflow-hidden bg-slate-900">
+
+    <!-- MAIN CANVAS GAME VIEW (HOST VIEW) -->
+    <div id="host-view" class="relative w-full h-full flex flex-col items-center justify-center">
+        <!-- TOP HEADER / NAV BAR -->
+        <header class="absolute top-0 left-0 right-0 z-20 flex justify-between items-center px-4 py-3 bg-slate-900/80 backdrop-blur-md border-b border-slate-700/50">
+            <div class="flex items-center space-x-3">
+                <span class="text-2xl">🐱🪐</span>
+                <h1 class="text-xl md:text-2xl font-bold tracking-wide text-yellow-400">GATO PLANETA <span class="text-xs px-2 py-0.5 bg-yellow-500/20 text-yellow-300 rounded-full border border-yellow-500/40">BATTLE ROYALE</span></h1>
+            </div>
+            <div id="host-header-status" class="flex items-center space-x-4">
+                <div class="hidden sm:flex items-center space-x-2 bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700 text-sm">
+                    <span class="text-slate-400">Código de Sala:</span>
+                    <span id="room-code-display" class="font-mono font-bold text-yellow-400 tracking-wider">Cargando...</span>
+                </div>
+                <button id="sound-toggle-btn" onclick="game.toggleAudio()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-yellow-300 rounded-lg text-sm font-semibold border border-slate-700 flex items-center space-x-1 transition">
+                    <span id="sound-icon">🔊</span> <span id="sound-text" class="hidden sm:inline">Sonido: ON</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- GAME CANVAS -->
+        <canvas id="gameCanvas" class="w-full h-full block bg-slate-950"></canvas>
+
+        <!-- LOBBY OVERLAY CONTAINER -->
+        <div id="lobby-modal" class="absolute inset-0 z-30 flex items-center justify-center bg-slate-950/85 backdrop-blur-md p-4">
+            <div class="max-w-4xl w-full bg-slate-900/90 border-2 border-yellow-500/50 rounded-2xl p-6 shadow-2xl shadow-yellow-500/10 flex flex-col md:flex-row gap-6">
+                <!-- LEFT PANEL: QR CODE & ROOM INFO -->
+                <div class="flex-1 flex flex-col items-center justify-center bg-slate-800/60 p-5 rounded-xl border border-slate-700 text-center">
+                    <h2 class="text-lg font-bold text-yellow-400 mb-1">📱 Escanea para Jugar desde el Celular</h2>
+                    <p class="text-xs text-slate-300 mb-4">Usa la cámara de tu teléfono para conectar tu mando virtual</p>
+                    
+                    <div class="bg-white p-3 rounded-xl shadow-lg border-4 border-yellow-400 flex items-center justify-center mb-4">
+                        <div id="qrcode" class="w-44 h-44 flex items-center justify-center text-slate-900">
+                            <span class="text-xs font-mono animate-pulse">Generando QR...</span>
+                        </div>
+                    </div>
+
+                    <div class="w-full bg-slate-950/80 p-3 rounded-lg border border-slate-700 flex flex-col items-center gap-2">
+                        <div class="flex items-center justify-between w-full">
+                            <span class="text-xs text-slate-400">Código de Sala:</span>
+                            <div class="flex items-center gap-2">
+                                <span id="lobby-connection-status" class="text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold">Cargando...</span>
+                                <span id="lobby-room-code" class="font-mono text-lg font-bold text-yellow-300">----</span>
+                            </div>
+                        </div>
+                        <button onclick="game.copyJoinLink()" class="w-full py-1.5 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-300 text-xs rounded-md font-semibold border border-yellow-500/40 transition flex items-center justify-center gap-1">
+                            📋 Copiar Enlace Directo
+                        </button>
+                    </div>
+
+                    <div class="w-full mt-3 flex gap-2">
+                        <button onclick="game.addBotPlayer()" class="flex-1 py-2 bg-indigo-600/80 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg border border-indigo-400/30 transition">
+                            🤖 Añadir Bot
+                        </button>
+                        <button onclick="game.addKeyboardPlayer()" class="flex-1 py-2 bg-emerald-600/80 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg border border-emerald-400/30 transition">
+                            ⌨️ Añadir Teclado
+                        </button>
+                    </div>
+                </div>
+
+                <!-- RIGHT PANEL: PLAYER LIST & START GAME -->
+                <div class="flex-1 flex flex-col justify-between bg-slate-800/60 p-5 rounded-xl border border-slate-700">
+                    <div>
+                        <div class="flex justify-between items-center mb-3">
+                            <h3 class="text-base font-bold text-slate-200 flex items-center gap-2">
+                                👥 Jugadores Conectados <span id="player-count-badge" class="bg-yellow-500 text-slate-950 font-extrabold text-xs px-2 py-0.5 rounded-full">0</span>
+                            </h3>
+                            <span class="text-xs text-slate-400">Sin límite de jugadores</span>
+                        </div>
+                        
+                        <div id="player-list" class="h-56 overflow-y-auto space-y-2 pr-1">
+                            <div class="text-center py-10 text-slate-500 text-sm italic">
+                                Esperando a que los jugadores escaneen el código QR...
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 pt-4 border-t border-slate-700/80">
+                        <div class="mb-3 text-xs text-slate-400 bg-slate-950/50 p-2 rounded border border-slate-800 flex justify-between items-center">
+                            <span>🎮 Mando local en PC:</span>
+                            <span class="font-mono text-yellow-300">Espacio / Flecha Arriba (SALTAR)</span>
+                        </div>
+                        <button id="start-game-btn" onclick="game.startMatchFromLobby()" class="w-full py-4 bg-gradient-to-r from-yellow-500 via-amber-500 to-yellow-400 hover:from-yellow-400 hover:to-amber-300 text-slate-950 font-extrabold text-lg rounded-xl shadow-lg shadow-yellow-500/20 transform hover:-translate-y-0.5 transition active:translate-y-0">
+                            🚀 ¡INICIAR JUEGO!
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TRANSITION SCREEN OVERLAY ("MEOWWWW!!") -->
+        <div id="meow-transition-overlay" class="hidden absolute inset-0 z-40 bg-slate-950/95 flex flex-col items-center justify-center p-4">
+            <div class="text-center space-y-6">
+                <h2 class="meow-text text-6xl md:text-8xl font-black tracking-widest uppercase filter drop-shadow-2xl">
+                    MEOWWWW!!
+                </h2>
+                <div id="transition-countdown" class="text-7xl md:text-9xl font-pixel text-yellow-400 animate-bounce">
+                    3
+                </div>
+                <p class="text-xl md:text-2xl text-pink-300 font-bold tracking-wider">
+                    🐱 ¡Prepárate para saltar sobre el Gato Planeta! 🪐
+                </p>
+            </div>
+        </div>
+
+        <!-- SPEED INCREASE BANNER OVERLAY -->
+        <div id="speed-banner" class="hidden pointer-events-none absolute top-20 z-30 left-1/2 transform -translate-x-1/2 bg-gradient-to-r from-red-600 via-orange-500 to-red-600 text-white font-black px-6 py-3 rounded-2xl shadow-2xl border-2 border-yellow-300 text-center text-lg md:text-2xl">
+            ⚡ ¡MEOW! LA VELOCIDAD HA AUMENTADO ⚡
+        </div>
+
+        <!-- FLOATING TOAST NOTIFICATION -->
+        <div id="game-toast" class="hidden absolute bottom-6 z-50 bg-slate-900/90 text-yellow-300 border border-yellow-500/40 px-4 py-2 rounded-xl text-xs md:text-sm font-bold shadow-xl transition transform duration-300">
+        </div>
+
+        <!-- IN-GAME HUD OVERLAY -->
+        <div id="game-hud" class="hidden absolute top-16 left-4 right-4 z-20 flex justify-between items-start pointer-events-none">
+            <div class="bg-slate-900/80 backdrop-blur border border-slate-700/80 px-4 py-2 rounded-xl text-xs md:text-sm flex flex-col gap-1 shadow-lg">
+                <div class="flex items-center gap-2">
+                    <span class="text-slate-400">⏱️ Tiempo:</span>
+                    <span id="hud-timer" class="font-mono text-yellow-400 font-bold">00:00</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-slate-400">⚡ Vel. Planeta:</span>
+                    <span id="hud-speed" class="font-mono text-red-400 font-bold">1.0x</span>
+                </div>
+            </div>
+            <div class="bg-slate-900/80 backdrop-blur border border-slate-700/80 px-4 py-2 rounded-xl text-xs md:text-sm flex flex-col gap-1 shadow-lg text-right">
+                <div class="flex items-center justify-end gap-2">
+                    <span class="text-slate-400">🐱 Vivos:</span>
+                    <span id="hud-alive-count" class="font-mono text-emerald-400 font-bold text-base">0 / 0</span>
+                </div>
+                <span id="hud-status-msg" class="text-xs text-yellow-300 animate-pulse">¡Esquiva los obstáculos!</span>
+            </div>
+        </div>
+
+        <!-- WINNER / GAME OVER MODAL -->
+        <div id="winner-modal" class="hidden absolute inset-0 z-40 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
+            <div class="max-w-md w-full bg-slate-900 border-2 border-yellow-400 rounded-2xl p-6 text-center shadow-2xl space-y-4">
+                <div class="text-5xl animate-bounce">🏆</div>
+                <h2 class="text-2xl md:text-3xl font-extrabold text-yellow-400">¡GANADOR DE LA PARTIDA!</h2>
+                <div id="winner-name-display" class="text-3xl font-black text-pink-400 py-2 bg-slate-800/80 rounded-xl border border-pink-500/30">
+                    --
+                </div>
+                <p class="text-xs text-slate-300">¡Sobrevivió a la furia rotatoria del Gato Planeta!</p>
+                <div class="flex gap-3 pt-2">
+                    <button onclick="game.resetMatchToLobby()" class="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-bold rounded-xl border border-slate-700 transition">
+                        🏠 Volver al Lobby
+                    </button>
+                    <button onclick="game.startMatchFromLobby()" class="flex-1 py-3 bg-yellow-500 hover:bg-yellow-400 text-slate-950 text-sm font-extrabold rounded-xl transition">
+                        🔄 Jugar Otra Vez
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MOBILE CONTROLLER VIEW (CLIENT / PHONE MODE) -->
+    <div id="controller-view" class="hidden fixed inset-0 z-50 bg-slate-950 flex flex-col justify-between p-4 touch-none select-none">
+        <header class="flex justify-between items-center bg-slate-900 p-3 rounded-xl border border-slate-800">
+            <div class="flex items-center space-x-2">
+                <span class="text-lg">🐾</span>
+                <span id="controller-player-name" class="font-bold text-yellow-400 text-sm">Jugador</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <div id="controller-color-indicator" class="w-5 h-5 rounded-full border-2 border-white shadow"></div>
+            </div>
+        </header>
+
+        <div id="controller-status-screen" class="my-auto bg-slate-900/90 border border-slate-800 p-5 rounded-2xl text-center space-y-4">
+            <h2 class="text-xl font-bold text-yellow-400">🎮 Mando Gato Planeta</h2>
+            
+            <div class="space-y-2 text-left">
+                <label class="text-xs text-slate-400">Tu Nombre de Jugador:</label>
+                <div class="flex gap-2">
+                    <input type="text" id="controller-name-input" maxlength="12" class="flex-1 bg-slate-950 border border-slate-700 px-3 py-2 rounded-lg text-sm text-yellow-300 font-bold focus:outline-none focus:border-yellow-500" value="GatoGamer">
+                    <button onclick="controller.updateName()" class="px-3 py-2 bg-yellow-500 text-slate-950 font-bold text-xs rounded-lg">Guardar</button>
+                </div>
+            </div>
+
+            <div class="space-y-1 text-left">
+                <label class="text-xs text-slate-400">Color de tu Monigote:</label>
+                <div id="controller-color-picker" class="flex justify-between gap-1 pt-1">
+                </div>
+            </div>
+
+            <div id="controller-state-msg" class="text-xs py-2 px-3 bg-slate-950 text-yellow-300 rounded-lg font-mono border border-yellow-500/20">
+                ✅ Conectado a la Sala. ¡Esperando que el Host inicie!
+            </div>
+        </div>
+
+        <div id="controller-buttons" class="grid grid-cols-3 gap-3 h-64 w-full">
+            <button id="btn-jump" class="btn-touch col-span-3 bg-gradient-to-b from-yellow-500 to-amber-600 active:from-yellow-400 active:to-amber-500 border-2 border-yellow-300 rounded-2xl flex flex-col items-center justify-center shadow-xl text-slate-950 font-extrabold">
+                <span class="text-6xl">⬆️</span>
+                <span class="text-lg tracking-wider mt-2 font-pixel">¡SALTAR!</span>
+            </button>
+
+            <button id="btn-meow" class="btn-touch col-span-3 bg-pink-600/90 active:bg-pink-500 border-2 border-pink-400 rounded-2xl py-3 flex items-center justify-center gap-2 shadow-lg text-white font-bold text-base">
+                <span class="text-2xl">🐾</span>
+                <span>¡MAULLAR! (MEOW)</span>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Color Palette definitions
+        const PLAYER_COLORS = [
+            { name: 'Rosa Neon', hex: '#ff007f' },
+            { name: 'Cian Electrito', hex: '#00f0ff' },
+            { name: 'Verde Lima', hex: '#39ff14' },
+            { name: 'Naranja Fuego', hex: '#ff5500' },
+            { name: 'Morado Galaxia', hex: '#b026ff' },
+            { name: 'Amarillo Sol', hex: '#ffea00' },
+            { name: 'Blanco Nieve', hex: '#ffffff' },
+            { name: 'Rojo Carmesi', hex: '#ff0033' }
+        ];
+
+        // Web Audio Synthesizer
+        class SoundEngine {
+            constructor() {
+                this.ctx = null;
+                this.isMuted = false;
+                this.bgmTimer = null;
+                this.tempo = 140;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    if (AudioCtx) this.ctx = new AudioCtx();
+                }
+                if (this.ctx && this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+
+            playJump() {
+                if (this.isMuted) return;
+                this.init();
+                if (!this.ctx) return;
+
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                const now = this.ctx.currentTime;
+
+                osc.frequency.setValueAtTime(180, now);
+                osc.frequency.exponentialRampToValueAtTime(620, now + 0.15);
+
+                gain.gain.setValueAtTime(0.25, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.15);
+            }
+
+            playMeow() {
+                if (this.isMuted) return;
+                this.init();
+                if (!this.ctx) return;
+
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                const now = this.ctx.currentTime;
+
+                osc.frequency.setValueAtTime(450, now);
+                osc.frequency.linearRampToValueAtTime(780, now + 0.12);
+                osc.frequency.linearRampToValueAtTime(320, now + 0.35);
+
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.linearRampToValueAtTime(0.35, now + 0.12);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.35);
+            }
+
+            playSpeedUp() {
+                if (this.isMuted) return;
+                this.init();
+                if (!this.ctx) return;
+
+                const now = this.ctx.currentTime;
+                [300, 450, 600, 800].forEach((freq, idx) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(freq, now + idx * 0.08);
+
+                    gain.gain.setValueAtTime(0.15, now + idx * 0.08);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.08 + 0.08);
+
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now + idx * 0.08);
+                    osc.stop(now + idx * 0.08 + 0.08);
+                });
+            }
+
+            playHit() {
+                if (this.isMuted) return;
+                this.init();
+                if (!this.ctx) return;
+
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.exponentialRampToValueAtTime(40, now + 0.25);
+
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.25);
+            }
+
+            playWin() {
+                if (this.isMuted) return;
+                this.init();
+                if (!this.ctx) return;
+
+                const now = this.ctx.currentTime;
+                const notes = [261.63, 329.63, 392.00, 523.25];
+                notes.forEach((freq, idx) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, now + idx * 0.12);
+
+                    gain.gain.setValueAtTime(0.25, now + idx * 0.12);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.12 + 0.25);
+
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now + idx * 0.12);
+                    osc.stop(now + idx * 0.12 + 0.25);
+                });
+            }
+
+            setBGMTempo(bpm) {
+                this.tempo = Math.min(bpm, 220);
+            }
+
+            startBGM() {
+                this.stopBGM();
+                let step = 0;
+                const notes = [261, 293, 329, 349, 392, 329, 293, 261];
+
+                const playStep = () => {
+                    if (this.isMuted) return;
+                    this.init();
+                    if (!this.ctx) return;
+
+                    const now = this.ctx.currentTime;
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(notes[step % notes.length], now);
+
+                    gain.gain.setValueAtTime(0.08, now);
+                    gain.gain.exponentialRampToValueAtTime(0.005, now + 0.15);
+
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.15);
+
+                    step++;
+                };
+
+                const intervalMs = (60 / this.tempo) * 1000 * 0.5;
+                this.bgmTimer = setInterval(playStep, intervalMs);
+            }
+
+            stopBGM() {
+                if (this.bgmTimer) {
+                    clearInterval(this.bgmTimer);
+                    this.bgmTimer = null;
+                }
+            }
+        }
+
+        const sound = new SoundEngine();
+
+        class CatPlanetGame {
+            constructor() {
+                this.canvas = document.getElementById('gameCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                
+                this.state = 'LOBBY';
+                this.players = new Map();
+                this.connections = new Map();
+                this.peer = null;
+                this.bc = null;
+                this.roomId = '';
+
+                this.planet = {
+                    x: 0,
+                    y: 0,
+                    radius: 320,
+                    angle: 0,
+                    baseSpeed: 0.32,
+                    speedMultiplier: 1.0,
+                    blinkTimer: 0,
+                    isBlinking: false,
+                    mouthOpen: 0, // 0 = closed, 1 = fully open
+                    mouthTarget: 0,
+                    purrTimer: 0
+                };
+
+                this.matchTime = 0;
+                this.speedTimer = 0;
+                this.spawnTimer = 0;
+                this.nextSpawnInterval = 2.0;
+                this.meowWarningPlayed = false;
+                this.lastFrameTime = performance.now();
+
+                this.obstacles = [];
+                this.stars = [];
+                this.shootingStars = [];
+                this.shootingStarTimer = 0;
+
+                this.soundEnabled = true;
+                this.localKeys = { jump: false, meow: false };
+
+                this.initStars();
+                this.resizeCanvas();
+                window.addEventListener('resize', () => this.resizeCanvas());
+                this.setupKeyboardListeners();
+            }
+
+            initStars() {
+                this.stars = [];
+                for (let i = 0; i < 45; i++) {
+                    this.stars.push({
+                        x: Math.random(),
+                        y: Math.random() * 0.65,
+                        radius: Math.random() * 4 + 2,
+                        haloRadius: Math.random() * 18 + 12,
+                        twinkleOffset: Math.random() * Math.PI * 2,
+                        twinkleSpeed: Math.random() * 2 + 1,
+                        color: Math.random() > 0.3 ? '#fde047' : '#f97316'
+                    });
+                }
+                this.shootingStars = [];
+            }
+
+            resizeCanvas() {
+                this.canvas.width = window.innerWidth;
+                this.canvas.height = window.innerHeight;
+                this.planet.x = this.canvas.width / 2;
+                this.planet.y = this.canvas.height + this.planet.radius * 0.22;
+                this.planet.radius = Math.min(this.canvas.width, this.canvas.height) * 0.52;
+            }
+
+            toggleAudio() {
+                this.soundEnabled = !this.soundEnabled;
+                sound.isMuted = !this.soundEnabled;
+                document.getElementById('sound-icon').innerText = this.soundEnabled ? '🔊' : '🔇';
+                document.getElementById('sound-text').innerText = this.soundEnabled ? 'Sonido: ON' : 'Sonido: OFF';
+            }
+
+            initPeerHost() {
+                const randomCode = Math.random().toString(36).substring(2, 7).toUpperCase();
+                this.roomId = 'GATO-' + randomCode;
+
+                this.updateRoomCodeUI(this.roomId, 'Conectando...');
+                this.initBroadcastChannel();
+
+                try {
+                    this.peer = new Peer(this.roomId, { debug: 1 });
+
+                    this.peer.on('open', (id) => {
+                        this.updateRoomCodeUI(id, '🟢 P2P En Línea');
+                        this.generateQRCode(id);
+                    });
+
+                    this.peer.on('connection', (conn) => {
+                        this.handleClientConnection(conn);
+                    });
+
+                    this.peer.on('error', (err) => {
+                        this.updateRoomCodeUI(this.roomId, '🟡 Canal Local');
+                        this.generateQRCode(this.roomId);
+                    });
+                } catch (e) {
+                    this.updateRoomCodeUI(this.roomId, '🟡 Canal Local');
+                    this.generateQRCode(this.roomId);
+                }
+            }
+
+            initBroadcastChannel() {
+                try {
+                    this.bc = new BroadcastChannel('gato-planet-' + this.roomId);
+                    this.bc.onmessage = (event) => {
+                        const { senderId, data } = event.data || {};
+                        if (!senderId || !data) return;
+
+                        if (data.type === 'CLIENT_JOIN') {
+                            this.handleLocalClientJoin(senderId, data.player);
+                        } else {
+                            this.handleClientData(senderId, data);
+                        }
+                    };
+                } catch (e) {
+                    console.warn('BroadcastChannel error:', e);
+                }
+            }
+
+            updateRoomCodeUI(id, statusText) {
+                document.getElementById('room-code-display').innerText = id;
+                document.getElementById('lobby-room-code').innerText = id;
+                const statusBadge = document.getElementById('lobby-connection-status');
+                if (statusBadge) statusBadge.innerText = statusText;
+            }
+
+            generateQRCode(roomId) {
+                const qrContainer = document.getElementById('qrcode');
+                qrContainer.innerHTML = '';
+                const joinUrl = window.location.origin + window.location.pathname + '?room=' + roomId;
+                new QRCode(qrContainer, {
+                    text: joinUrl,
+                    width: 160,
+                    height: 160,
+                    colorDark: '#0f172a',
+                    colorLight: '#ffffff',
+                    correctLevel: QRCode.CorrectLevel.M
+                });
+            }
+
+            copyJoinLink() {
+                const joinUrl = window.location.origin + window.location.pathname + '?room=' + this.roomId;
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(joinUrl).then(() => {
+                        this.showToast('📋 Enlace de invitación copiado!');
+                    }).catch(() => {
+                        this.showToast('Código de Sala: ' + this.roomId);
+                    });
+                } else {
+                    this.showToast('Código de Sala: ' + this.roomId);
+                }
+            }
+
+            showToast(message) {
+                const toast = document.getElementById('game-toast');
+                if (!toast) return;
+                toast.innerText = message;
+                toast.classList.remove('hidden');
+                setTimeout(() => {
+                    toast.classList.add('hidden');
+                }, 3000);
+            }
+
+            handleClientConnection(conn) {
+                conn.on('open', () => {
+                    const playerId = conn.peer;
+                    this.registerNewPlayer(playerId);
+                    this.connections.set(playerId, conn);
+
+                    conn.send({
+                        type: 'WELCOME',
+                        player: { id: playerId, name: this.players.get(playerId).name, color: this.players.get(playerId).color },
+                        roomId: this.roomId
+                    });
+
+                    this.updateLobbyUI();
+
+                    conn.on('data', (data) => {
+                        this.handleClientData(playerId, data);
+                    });
+
+                    conn.on('close', () => {
+                        this.removePlayer(playerId);
+                    });
+                });
+            }
+
+            handleLocalClientJoin(senderId, clientInfo) {
+                if (!this.players.has(senderId)) {
+                    const player = this.registerNewPlayer(senderId);
+                    if (clientInfo && clientInfo.name) player.name = clientInfo.name;
+                    if (clientInfo && clientInfo.color) player.color = clientInfo.color;
+                    this.updateLobbyUI();
+                }
+
+                if (this.bc) {
+                    this.bc.postMessage({
+                        senderId: 'HOST',
+                        targetId: senderId,
+                        data: {
+                            type: 'WELCOME',
+                            player: { id: senderId, name: this.players.get(senderId).name, color: this.players.get(senderId).color },
+                            roomId: this.roomId
+                        }
+                    });
+                }
+            }
+
+            registerNewPlayer(playerId) {
+                const defaultColor = PLAYER_COLORS[this.players.size % PLAYER_COLORS.length].hex;
+                const player = {
+                    id: playerId,
+                    name: 'Gato' + (this.players.size + 1),
+                    color: defaultColor,
+                    angle: -Math.PI / 2,
+                    homeAngle: -Math.PI / 2,
+                    height: 0,
+                    vy: 0,
+                    isGrounded: true,
+                    isEliminated: false,
+                    isBot: false,
+                    meowTimer: 0,
+                    animFrame: 0,
+                    ping: 15,
+                    lastPingTime: performance.now(),
+                    input: { jump: false, meow: false }
+                };
+
+                this.players.set(playerId, player);
+                return player;
+            }
+
+            handleClientData(playerId, data) {
+                const player = this.players.get(playerId);
+                if (!player) return;
+
+                if (data.type === 'INPUT') {
+                    player.input = data.input;
+                    if (data.input.meow && player.meowTimer <= 0) {
+                        player.meowTimer = 1.2;
+                        this.planet.mouthTarget = 1.0;
+                        sound.playMeow();
+                    }
+                } else if (data.type === 'UPDATE_PROFILE') {
+                    if (data.name) player.name = data.name.substring(0, 12);
+                    if (data.color) player.color = data.color;
+                    this.updateLobbyUI();
+                } else if (data.type === 'PONG') {
+                    player.ping = Math.round(performance.now() - player.lastPingTime);
+                }
+            }
+
+            kickPlayer(playerId) {
+                const conn = this.connections.get(playerId);
+                if (conn) {
+                    conn.send({ type: 'KICKED' });
+                    conn.close();
+                }
+                if (this.bc) {
+                    this.bc.postMessage({ senderId: 'HOST', targetId: playerId, data: { type: 'KICKED' } });
+                }
+                this.removePlayer(playerId);
+            }
+
+            removePlayer(playerId) {
+                this.players.delete(playerId);
+                this.connections.delete(playerId);
+                this.updateLobbyUI();
+            }
+
+            addBotPlayer() {
+                const botId = 'bot-' + Math.random().toString(36).substring(2, 7);
+                const color = PLAYER_COLORS[this.players.size % PLAYER_COLORS.length].hex;
+                const bot = {
+                    id: botId,
+                    name: '🤖 BotGato' + (this.players.size + 1),
+                    color: color,
+                    angle: -Math.PI / 2 + (Math.random() - 0.5) * 0.8,
+                    height: 0,
+                    vy: 0,
+                    isGrounded: true,
+                    isEliminated: false,
+                    isBot: true,
+                    meowTimer: 0,
+                    animFrame: 0,
+                    ping: 0,
+                    input: { jump: false, meow: false }
+                };
+                this.players.set(botId, bot);
+                this.updateLobbyUI();
+            }
+
+            addKeyboardPlayer() {
+                const localId = 'local-keyboard';
+                if (this.players.has(localId)) return;
+                const color = '#39ff14';
+                const p = {
+                    id: localId,
+                    name: '⌨️ Jugador PC',
+                    color: color,
+                    angle: -Math.PI / 2,
+                    height: 0,
+                    vy: 0,
+                    isGrounded: true,
+                    isEliminated: false,
+                    isBot: false,
+                    meowTimer: 0,
+                    animFrame: 0,
+                    ping: 0,
+                    input: this.localKeys
+                };
+                this.players.set(localId, p);
+                this.updateLobbyUI();
+            }
+
+            setupKeyboardListeners() {
+                window.addEventListener('keydown', (e) => {
+                    if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
+                        if (!this.localKeys.jump) {
+                            const p = this.players.get('local-keyboard');
+                            if (p && p.input) p.input.jump = true;
+                        }
+                        this.localKeys.jump = true;
+                    }
+                    if (e.code === 'KeyM') {
+                        this.localKeys.meow = true;
+                        const p = this.players.get('local-keyboard');
+                        if (p && p.meowTimer <= 0) {
+                            p.meowTimer = 1.2;
+                            this.planet.mouthTarget = 1.0;
+                            sound.playMeow();
+                        }
+                    }
+                });
+
+                window.addEventListener('keyup', (e) => {
+                    if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') this.localKeys.jump = false;
+                    if (e.code === 'KeyM') this.localKeys.meow = false;
+                });
+            }
+
+            updateLobbyUI() {
+                const playerList = document.getElementById('player-list');
+                const badge = document.getElementById('player-count-badge');
+                badge.innerText = this.players.size;
+
+                if (this.players.size === 0) {
+                    playerList.innerHTML = `<div class="text-center py-10 text-slate-500 text-sm italic">Esperando a que los jugadores escaneen el código QR...</div>`;
+                    return;
+                }
+
+                let html = '';
+                this.players.forEach((p) => {
+                    html += `
+                        <div class="flex items-center justify-between bg-slate-950/80 p-2.5 rounded-xl border border-slate-800">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-4 h-4 rounded-full border border-white" style="background-color: ${p.color}"></div>
+                                <span class="font-bold text-sm text-slate-200">${p.name}</span>
+                                ${p.isBot ? '<span class="text-[10px] bg-indigo-900 text-indigo-300 px-1.5 py-0.5 rounded">BOT</span>' : ''}
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <span class="text-xs font-mono text-slate-400">${p.isBot ? '--' : p.ping + 'ms'}</span>
+                                <button onclick="game.kickPlayer('${p.id}')" class="px-2 py-1 bg-red-600/20 hover:bg-red-600/40 text-red-400 text-xs rounded border border-red-500/30 transition">
+                                    Expulsar
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                });
+                playerList.innerHTML = html;
+            }
+
+            startMatchFromLobby() {
+                if (this.players.size === 0) {
+                    this.addBotPlayer();
+                }
+
+                document.getElementById('lobby-modal').classList.add('hidden');
+                document.getElementById('meow-transition-overlay').classList.remove('hidden');
+
+                sound.playMeow();
+
+                let count = 3;
+                const countdownElem = document.getElementById('transition-countdown');
+                countdownElem.innerText = count;
+
+                const timer = setInterval(() => {
+                    count--;
+                    if (count > 0) {
+                        countdownElem.innerText = count;
+                        sound.playJump();
+                    } else if (count === 0) {
+                        countdownElem.innerText = '¡A SALTAR!';
+                        sound.playMeow();
+                    } else {
+                        clearInterval(timer);
+                        document.getElementById('meow-transition-overlay').classList.add('hidden');
+                        document.getElementById('game-hud').classList.remove('hidden');
+                        this.initGameRound();
+                    }
+                }, 900);
+            }
+
+            initGameRound() {
+                this.state = 'PLAYING';
+                this.matchTime = 0;
+                this.speedTimer = 0;
+                this.spawnTimer = 0;
+                this.nextSpawnInterval = 1.8;
+                this.meowWarningPlayed = false;
+                this.planet.speedMultiplier = 1.0;
+                sound.setBGMTempo(140);
+                sound.startBGM();
+
+                this.obstacles = [];
+                const initialSpawnAngles = [-Math.PI * 0.9, -Math.PI * 0.7, -Math.PI * 0.5];
+                initialSpawnAngles.forEach(relAngle => {
+                    this.obstacles.push(this.createRandomObstacle(relAngle - this.planet.angle));
+                });
+
+                let index = 0;
+                const total = this.players.size;
+                this.players.forEach((p) => {
+                    p.homeAngle = -Math.PI / 2 + ((index - (total - 1) / 2) * 0.08);
+                    p.angle = p.homeAngle;
+                    p.height = 0;
+                    p.vy = 0;
+                    p.isGrounded = true;
+                    p.isEliminated = false;
+                    index++;
+                });
+            }
+
+            createRandomObstacle(planetRelativeAngle) {
+                const types = ['spike', 'double_spike', 'box', 'yarn_ball', 'fish_bone', 'cat_tree', 'laser_hurdle'];
+                const selectedType = types[Math.floor(Math.random() * types.length)];
+                
+                const obstacleData = {
+                    angle: planetRelativeAngle,
+                    type: selectedType,
+                    width: 26 + Math.random() * 12,
+                    height: 38 + Math.random() * 20,
+                    color: PLAYER_COLORS[Math.floor(Math.random() * PLAYER_COLORS.length)].hex
+                };
+
+                if (selectedType === 'yarn_ball') obstacleData.height = 36;
+                if (selectedType === 'fish_bone') obstacleData.height = 32;
+                if (selectedType === 'cat_tree') obstacleData.height = 58;
+
+                return obstacleData;
+            }
+
+            updatePhysics(dt) {
+                if (this.state !== 'PLAYING') return;
+
+                this.matchTime += dt;
+                this.speedTimer += dt;
+                this.spawnTimer += dt;
+
+                // Animate Cat Purring & Mouth state
+                this.planet.purrTimer += dt * 5;
+                if (this.planet.mouthTarget > 0) {
+                    this.planet.mouthOpen += (this.planet.mouthTarget - this.planet.mouthOpen) * 8 * dt;
+                    if (Math.abs(this.planet.mouthOpen - this.planet.mouthTarget) < 0.05) {
+                        this.planet.mouthTarget = 0; // start closing
+                    }
+                } else {
+                    this.planet.mouthOpen += (0 - this.planet.mouthOpen) * 4 * dt;
+                }
+
+                // Shooting star generator
+                this.shootingStarTimer += dt;
+                if (this.shootingStarTimer > 3.5 + Math.random() * 4) {
+                    this.shootingStarTimer = 0;
+                    this.shootingStars.push({
+                        x: Math.random() * this.canvas.width * 0.7,
+                        y: Math.random() * this.canvas.height * 0.3,
+                        vx: Math.random() * 400 + 350,
+                        vy: Math.random() * 180 + 120,
+                        length: Math.random() * 80 + 60,
+                        life: 1.0
+                    });
+                }
+
+                // Update Shooting Stars
+                this.shootingStars.forEach(ss => {
+                    ss.x += ss.vx * dt;
+                    ss.y += ss.vy * dt;
+                    ss.life -= dt * 1.2;
+                });
+                this.shootingStars = this.shootingStars.filter(ss => ss.life > 0);
+
+                // Meow Warning at 13.5 seconds
+                if (this.speedTimer >= 13.5 && !this.meowWarningPlayed) {
+                    this.meowWarningPlayed = true;
+                    this.planet.mouthTarget = 1.0;
+                    sound.playMeow();
+                    this.showToast('🐾 ¡MIAU! ¡La velocidad va a subir!');
+                }
+
+                // Speed increases every 15 seconds!
+                if (this.speedTimer >= 15) {
+                    this.speedTimer = 0;
+                    this.meowWarningPlayed = false;
+                    this.planet.speedMultiplier += 0.35;
+                    this.planet.mouthTarget = 1.0;
+                    sound.setBGMTempo(sound.tempo + 18);
+                    sound.playSpeedUp();
+                    this.showSpeedBanner();
+                }
+
+                const currentPlanetSpeed = this.planet.baseSpeed * this.planet.speedMultiplier;
+                this.planet.angle += currentPlanetSpeed * dt;
+
+                if (this.spawnTimer >= this.nextSpawnInterval) {
+                    this.spawnTimer = 0;
+                    const spawnAngle = -this.planet.angle - Math.PI * 0.95;
+                    this.obstacles.push(this.createRandomObstacle(spawnAngle));
+
+                    const baseInterval = 2.2 / this.planet.speedMultiplier;
+                    const randomVariance = 0.4 + Math.random() * 1.1;
+
+                    if (Math.random() < 0.22) {
+                        this.nextSpawnInterval = Math.max(0.48, 0.7 / this.planet.speedMultiplier);
+                    } else {
+                        this.nextSpawnInterval = Math.max(0.65, baseInterval * randomVariance);
+                    }
+                }
+
+                this.obstacles = this.obstacles.filter(obs => {
+                    const worldAngle = obs.angle + this.planet.angle;
+                    return worldAngle < -Math.PI * 0.05;
+                });
+
+                let aliveCount = 0;
+
+                this.players.forEach((p) => {
+                    if (p.isEliminated) return;
+
+                    aliveCount++;
+
+                    if (p.isBot) {
+                        this.updateBotAI(p, currentPlanetSpeed);
+                    }
+
+                    if (p.input.jump && p.isGrounded) {
+                        p.vy = 520;
+                        p.isGrounded = false;
+                        p.input.jump = false;
+                        sound.playJump();
+                    }
+
+                    if (!p.isGrounded) {
+                        p.height += p.vy * dt;
+                        p.vy -= 1400 * dt;
+                        if (p.height <= 0) {
+                            p.height = 0;
+                            p.vy = 0;
+                            p.isGrounded = true;
+                        }
+                    }
+
+                    let beingPushed = false;
+                    const playerWorldAngle = p.angle;
+
+                    this.obstacles.forEach((obs) => {
+                        const obsWorldAngle = obs.angle + this.planet.angle;
+                        const angularDiff = Math.abs(playerWorldAngle - obsWorldAngle);
+
+                        if (angularDiff < 0.055) {
+                            if (p.height < obs.height * 0.75) {
+                                beingPushed = true;
+                            }
+                        }
+                    });
+
+                    if (beingPushed && p.isGrounded) {
+                        p.angle += currentPlanetSpeed * dt * 1.35;
+                    } else if (p.angle > p.homeAngle) {
+                        p.angle -= 0.6 * dt;
+                        if (p.angle < p.homeAngle) p.angle = p.homeAngle;
+                    }
+
+                    const rightEdgeThreshold = p.homeAngle + 0.42;
+                    if (p.angle >= rightEdgeThreshold) {
+                        p.isEliminated = true;
+                        sound.playHit();
+                        this.showToast(`💥 ¡${p.name} fue arrastrado fuera del planeta!`);
+                    }
+
+                    if (p.meowTimer > 0) p.meowTimer -= dt;
+                });
+
+                document.getElementById('hud-timer').innerText = this.formatTime(this.matchTime);
+                document.getElementById('hud-speed').innerText = this.planet.speedMultiplier.toFixed(1) + 'x';
+                document.getElementById('hud-alive-count').innerText = `${aliveCount} / ${this.players.size}`;
+
+                if (aliveCount <= 1 && this.players.size > 1) {
+                    this.triggerMatchOver();
+                } else if (aliveCount === 0 && this.players.size === 1) {
+                    this.triggerMatchOver();
+                }
+            }
+
+            updateBotAI(bot, planetSpeed) {
+                let dangerNear = false;
+
+                this.obstacles.forEach((obs) => {
+                    const obsWorldAngle = obs.angle + this.planet.angle;
+                    const diff = bot.angle - obsWorldAngle;
+
+                    if (diff < 0.08 && diff > -0.22) {
+                        dangerNear = true;
+                    }
+                });
+
+                bot.input.jump = dangerNear && bot.isGrounded;
+            }
+
+            formatTime(seconds) {
+                const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+                const s = Math.floor(seconds % 60).toString().padStart(2, '0');
+                return `${m}:${s}`;
+            }
+
+            showSpeedBanner() {
+                const banner = document.getElementById('speed-banner');
+                if (!banner) return;
+                banner.classList.remove('hidden');
+                banner.classList.remove('animate-speed-banner');
+                void banner.offsetWidth;
+                banner.classList.add('animate-speed-banner');
+                setTimeout(() => {
+                    banner.classList.add('hidden');
+                }, 2500);
+            }
+
+            triggerMatchOver() {
+                if (this.state === 'GAMEOVER') return;
+                this.state = 'GAMEOVER';
+                sound.stopBGM();
+                sound.playWin();
+
+                let winnerName = '¡Nadie!';
+                this.players.forEach(p => {
+                    if (!p.isEliminated) winnerName = p.name;
+                });
+
+                document.getElementById('winner-name-display').innerText = winnerName;
+                document.getElementById('winner-modal').classList.remove('hidden');
+            }
+
+            resetMatchToLobby() {
+                this.state = 'LOBBY';
+                sound.stopBGM();
+                document.getElementById('winner-modal').classList.add('hidden');
+                document.getElementById('game-hud').classList.add('hidden');
+                document.getElementById('lobby-modal').classList.remove('hidden');
+            }
+
+            render() {
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+                // 1. Draw Sky, Van Gogh Swirling Stars, and Water Reflections
+                this.drawBackground();
+
+                // 2. Draw Calico Cat Planet Body & Animated Features
+                this.drawCatPlanet();
+
+                // 3. Draw Obstacles
+                this.drawObstacles();
+
+                // 4. Draw Players
+                this.drawPlayers();
+            }
+
+            drawBackground() {
+                const w = this.canvas.width;
+                const h = this.canvas.height;
+                const time = performance.now() * 0.001;
+
+                // Deep Midnight Blue Swirling Gradient (Inspired by Starry Night)
+                const skyGrad = this.ctx.createLinearGradient(0, 0, 0, h);
+                skyGrad.addColorStop(0, '#0a0d24');
+                skyGrad.addColorStop(0.4, '#12183b');
+                skyGrad.addColorStop(0.8, '#1b2354');
+                skyGrad.addColorStop(1, '#0e132c');
+                this.ctx.fillStyle = skyGrad;
+                this.ctx.fillRect(0, 0, w, h);
+
+                // Swirling Impressionist Halos and Golden Glowing Stars
+                this.stars.forEach(s => {
+                    const sx = s.x * w;
+                    const sy = s.y * h;
+                    const twinkle = Math.sin(time * s.twinkleSpeed + s.twinkleOffset);
+                    const alpha = 0.6 + 0.4 * twinkle;
+
+                    // Concentric Brushstroke Swirling Halos
+                    this.ctx.save();
+                    this.ctx.globalAlpha = alpha * 0.45;
+                    this.ctx.strokeStyle = s.color;
+                    this.ctx.lineWidth = 1.8;
+                    this.ctx.setLineDash([4, 6]);
+
+                    this.ctx.beginPath();
+                    this.ctx.arc(sx, sy, s.haloRadius + twinkle * 3, 0, Math.PI * 2);
+                    this.ctx.stroke();
+
+                    this.ctx.beginPath();
+                    this.ctx.arc(sx, sy, s.haloRadius * 0.6, 0, Math.PI * 2);
+                    this.ctx.stroke();
+                    this.ctx.restore();
+
+                    // Bright Star Core
+                    const coreGrad = this.ctx.createRadialGradient(sx, sy, 0, sx, sy, s.radius * 2);
+                    coreGrad.addColorStop(0, '#ffffff');
+                    coreGrad.addColorStop(0.5, s.color);
+                    coreGrad.addColorStop(1, 'transparent');
+
+                    this.ctx.fillStyle = coreGrad;
+                    this.ctx.beginPath();
+                    this.ctx.arc(sx, sy, s.radius * 2.5, 0, Math.PI * 2);
+                    this.ctx.fill();
+                });
+
+                // Shooting Stars (Estrellas Fugaces)
+                this.shootingStars.forEach(ss => {
+                    this.ctx.save();
+                    this.ctx.globalAlpha = ss.life;
+                    const grad = this.ctx.createLinearGradient(ss.x, ss.y, ss.x - ss.length, ss.y - ss.length * 0.5);
+                    grad.addColorStop(0, '#ffffff');
+                    grad.addColorStop(0.3, '#fef08a');
+                    grad.addColorStop(1, 'transparent');
+
+                    this.ctx.strokeStyle = grad;
+                    this.ctx.lineWidth = 3.5;
+                    this.ctx.lineCap = 'round';
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(ss.x, ss.y);
+                    this.ctx.lineTo(ss.x - ss.length, ss.y - ss.length * 0.5);
+                    this.ctx.stroke();
+
+                    // Bright head spark
+                    this.ctx.fillStyle = '#ffffff';
+                    this.ctx.beginPath();
+                    this.ctx.arc(ss.x, ss.y, 3, 0, Math.PI * 2);
+                    this.ctx.fill();
+                    this.ctx.restore();
+                });
+
+                // Shimmering Horizon Water Light Reflections (Inspired by Starry Night Over the Rhône)
+                const horizonY = h * 0.88;
+                this.ctx.save();
+                this.ctx.fillStyle = 'rgba(10, 15, 38, 0.7)';
+                this.ctx.fillRect(0, horizonY, w, h - horizonY);
+
+                for (let i = 0; i < 24; i++) {
+                    const rx = (i / 24) * w + Math.sin(time + i) * 15;
+                    const ry = horizonY + (i % 6) * 12 + Math.cos(time * 2 + i) * 3;
+                    const rw = 20 + Math.sin(time * 3 + i) * 15;
+
+                    this.ctx.fillStyle = i % 2 === 0 ? 'rgba(253, 224, 71, 0.25)' : 'rgba(56, 189, 248, 0.2)';
+                    this.ctx.fillRect(rx, ry, rw, 2);
+                }
+                this.ctx.restore();
+            }
+
+            drawCatPlanet() {
+                const p = this.planet;
+                const time = performance.now() * 0.001;
+
+                this.ctx.save();
+                this.ctx.translate(p.x, p.y);
+
+                // Eyelid Blinking Logic
+                p.blinkTimer += 0.016;
+                if (p.blinkTimer > 3.5) {
+                    if (p.blinkTimer > 3.68) {
+                        p.blinkTimer = 0;
+                        p.isBlinking = false;
+                    } else {
+                        p.isBlinking = true;
+                    }
+                }
+
+                // Smooth Pupil Motion Tracking
+                const pupilOffsetX = Math.sin(time * 1.5) * 8;
+                const pupilOffsetY = Math.cos(time * 2.1) * 5;
+
+                // 1. EAR STRUCTURES (Calico dark charcoal & ginger)
+                this.drawCatEar(-p.radius * 0.52, -p.radius * 0.84, -0.28, '#242021', '#f2a4ad');
+                this.drawCatEar(p.radius * 0.52, -p.radius * 0.84, 0.28, '#d96e28', '#f2a4ad');
+
+                // 2. MAIN PLANET SPHERE (Calico Cream Base)
+                this.ctx.beginPath();
+                this.ctx.arc(0, 0, p.radius, 0, Math.PI * 2);
+                this.ctx.fillStyle = '#fbf7ee';
+                this.ctx.fill();
+
+                // 3. CALICO FUR PATCHES (Dark Charcoal & Warm Ginger Patches)
+                this.ctx.save();
+                this.ctx.clip(); // Clip patches to sphere boundary
+
+                // Left Dark Patch
+                this.ctx.fillStyle = '#242021';
+                this.ctx.beginPath();
+                this.ctx.ellipse(-p.radius * 0.65, -p.radius * 0.45, p.radius * 0.55, p.radius * 0.6, 0.4, 0, Math.PI * 2);
+                this.ctx.fill();
+
+                // Right Ginger Patch
+                this.ctx.fillStyle = '#d96e28';
+                this.ctx.beginPath();
+                this.ctx.ellipse(p.radius * 0.68, -p.radius * 0.35, p.radius * 0.52, p.radius * 0.55, -0.35, 0, Math.PI * 2);
+                this.ctx.fill();
+
+                // Top Forehead Calico Patch
+                this.ctx.fillStyle = '#c2571a';
+                this.ctx.beginPath();
+                this.ctx.ellipse(0, -p.radius * 0.88, p.radius * 0.28, p.radius * 0.22, 0, 0, Math.PI * 2);
+                this.ctx.fill();
+                this.ctx.restore();
+
+                // Planet Outline Contour
+                this.ctx.lineWidth = 5;
+                this.ctx.strokeStyle = '#1e1b18';
+                this.ctx.stroke();
+
+                // 4. CALICO CAT FACE FEATURES
+                const faceY = -p.radius * 0.42;
+
+                // Glossy Expressive Eyes (Hazelly-Green Calico Eyes)
+                this.drawRealisticCatEye(-p.radius * 0.28, faceY, p.isBlinking, pupilOffsetX, pupilOffsetY);
+                this.drawRealisticCatEye(p.radius * 0.28, faceY, p.isBlinking, pupilOffsetX, pupilOffsetY);
+
+                // Cute Pink Nose
+                const noseY = faceY + 42;
+                this.ctx.fillStyle = '#e26a7a';
+                this.ctx.beginPath();
+                this.ctx.moveTo(0, noseY + 10);
+                this.ctx.lineTo(-14, noseY - 6);
+                this.ctx.lineTo(14, noseY - 6);
+                this.ctx.closePath();
+                this.ctx.fill();
+                this.ctx.lineWidth = 1.5;
+                this.ctx.strokeStyle = '#8c3541';
+                this.ctx.stroke();
+
+                // Nostril accents
+                this.ctx.fillStyle = '#8c3541';
+                this.ctx.beginPath();
+                this.ctx.arc(-5, noseY + 4, 2, 0, Math.PI * 2);
+                this.ctx.arc(5, noseY + 4, 2, 0, Math.PI * 2);
+                this.ctx.fill();
+
+                // 5. ANIMATED CAT MOUTH & TONGUE
+                this.drawAnimatedMouth(0, noseY + 12, p.mouthOpen, Math.sin(p.purrTimer) * 1.5);
+
+                // Whisker Tufts & Whiskers
+                this.drawWhiskers(-p.radius * 0.32, noseY + 14, true);
+                this.drawWhiskers(p.radius * 0.32, noseY + 14, false);
+
+                // Rosy Blush Cheeks
+                this.ctx.fillStyle = 'rgba(244, 114, 182, 0.35)';
+                this.ctx.beginPath();
+                this.ctx.ellipse(-p.radius * 0.48, noseY + 12, 22, 14, 0, 0, Math.PI * 2);
+                this.ctx.ellipse(p.radius * 0.48, noseY + 12, 22, 14, 0, 0, Math.PI * 2);
+                this.ctx.fill();
+
+                this.ctx.restore();
+            }
+
+            drawCatEar(x, y, rotation, outerColor, innerColor) {
+                this.ctx.save();
+                this.ctx.translate(x, y);
+                this.ctx.rotate(rotation);
+
+                // Outer Ear
+                this.ctx.fillStyle = outerColor;
+                this.ctx.beginPath();
+                this.ctx.moveTo(0, -95);
+                this.ctx.lineTo(-45, 20);
+                this.ctx.lineTo(45, 20);
+                this.ctx.closePath();
+                this.ctx.fill();
+                this.ctx.lineWidth = 4;
+                this.ctx.strokeStyle = '#1e1b18';
+                this.ctx.stroke();
+
+                // Inner Pink Ear
+                this.ctx.fillStyle = innerColor;
+                this.ctx.beginPath();
+                this.ctx.moveTo(0, -75);
+                this.ctx.lineTo(-28, 12);
+                this.ctx.lineTo(28, 12);
+                this.ctx.closePath();
+                this.ctx.fill();
+
+                // Ear Hair Tufts
+                this.ctx.strokeStyle = '#ffffff';
+                this.ctx.lineWidth = 2;
+                this.ctx.beginPath();
+                this.ctx.moveTo(-15, 10);
+                this.ctx.lineTo(-5, -20);
+                this.ctx.moveTo(0, 12);
+                this.ctx.lineTo(5, -25);
+                this.ctx.moveTo(15, 10);
+                this.ctx.lineTo(12, -15);
+                this.ctx.stroke();
+
+                this.ctx.restore();
+            }
+
+            drawRealisticCatEye(x, y, isBlinking, pupilX, pupilY) {
+                this.ctx.save();
+                this.ctx.translate(x, y);
+
+                if (isBlinking) {
+                    this.ctx.lineWidth = 6;
+                    this.ctx.strokeStyle = '#1e1b18';
+                    this.ctx.lineCap = 'round';
+                    this.ctx.beginPath();
+                    this.ctx.arc(0, 0, 38, 0.2 * Math.PI, 0.8 * Math.PI);
+                    this.ctx.stroke();
+                } else {
+                    // Eye Socket Background
+                    this.ctx.beginPath();
+                    this.ctx.ellipse(0, 0, 42, 54, 0, 0, Math.PI * 2);
+                    this.ctx.fillStyle = '#1e1b18';
+                    this.ctx.fill();
+
+                    // Rich Hazel/Amber Iris Gradient
+                    const irisGrad = this.ctx.createRadialGradient(0, 0, 5, 0, 0, 42);
+                    irisGrad.addColorStop(0, '#facc15'); // Bright amber inner
+                    irisGrad.addColorStop(0.5, '#84cc16'); // Vibrant hazel green
+                    irisGrad.addColorStop(0.95, '#3f6212'); // Deep forest edge
+                    irisGrad.addColorStop(1, '#1e1b18');
+
+                    this.ctx.beginPath();
+                    this.ctx.ellipse(0, 0, 39, 51, 0, 0, Math.PI * 2);
+                    this.ctx.fillStyle = irisGrad;
+                    this.ctx.fill();
+
+                    // Slit Pupil with Tracking
+                    this.ctx.fillStyle = '#0f172a';
+                    this.ctx.beginPath();
+                    this.ctx.ellipse(pupilX, pupilY, 12, 42, 0, 0, Math.PI * 2);
+                    this.ctx.fill();
+
+                    // Double Glossy Specular Highlights (As seen in calico reference photo)
+                    this.ctx.fillStyle = '#ffffff';
+                    this.ctx.beginPath();
+                    this.ctx.arc(-12 + pupilX, -18 + pupilY, 11, 0, Math.PI * 2);
+                    this.ctx.fill();
+
+                    this.ctx.beginPath();
+                    this.ctx.arc(12 + pupilX, 16 + pupilY, 6, 0, Math.PI * 2);
+                    this.ctx.fill();
+                }
+
+                this.ctx.restore();
+            }
+
+            drawAnimatedMouth(x, y, mouthOpenFactor, purrOffset) {
+                this.ctx.save();
+                this.ctx.translate(x, y + purrOffset);
+
+                this.ctx.lineWidth = 3.5;
+                this.ctx.strokeStyle = '#1e1b18';
+
+                if (mouthOpenFactor > 0.1) {
+                    // Open Meowing Mouth
+                    const mouthHeight = 18 * mouthOpenFactor;
+
+                    this.ctx.fillStyle = '#5c1d24';
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(-16, 0);
+                    this.ctx.quadraticCurveTo(0, mouthHeight * 1.8, 16, 0);
+                    this.ctx.quadraticCurveTo(0, -4, -16, 0);
+                    this.ctx.closePath();
+                    this.ctx.fill();
+                    this.ctx.stroke();
+
+                    // Pink Tongue
+                    this.ctx.fillStyle = '#f472b6';
+                    this.ctx.beginPath();
+                    this.ctx.ellipse(0, mouthHeight * 0.8, 10, 7 * mouthOpenFactor, 0, 0, Math.PI * 2);
+                    this.ctx.fill();
+                } else {
+                    // Cute Closed Cat Smile / Muzzle W-Curve
+                    this.ctx.beginPath();
+                    this.ctx.arc(-12, 0, 12, 0.15 * Math.PI, 0.85 * Math.PI);
+                    this.ctx.arc(12, 0, 12, 0.15 * Math.PI, 0.85 * Math.PI);
+                    this.ctx.stroke();
+                }
+
+                this.ctx.restore();
+            }
+
+            drawStripeArc(x, y, radius, isLeft) {
+                this.ctx.beginPath();
+                this.ctx.arc(x, y, radius, isLeft ? -0.4 : Math.PI - 0.4, isLeft ? 0.4 : Math.PI + 0.4);
+                this.ctx.lineWidth = 14;
+                this.ctx.strokeStyle = '#9E0022';
+                this.ctx.stroke();
+            }
+
+            drawWhiskers(x, y, isLeft) {
+                this.ctx.lineWidth = 2.5;
+                this.ctx.strokeStyle = '#ffffff';
+                const dir = isLeft ? -1 : 1;
+
+                for (let i = -1; i <= 1; i++) {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(x, y + i * 5);
+                    this.ctx.lineTo(x + dir * 65, y + i * 16 - 8);
+                    this.ctx.stroke();
+                }
+            }
+
+            drawHeart(x, y, size) {
+                this.ctx.save();
+                this.ctx.translate(x, y);
+                this.ctx.fillStyle = '#ff0033';
+                this.ctx.beginPath();
+                this.ctx.moveTo(0, 0);
+                this.ctx.bezierCurveTo(-size / 2, -size / 2, -size, size / 3, 0, size);
+                this.ctx.bezierCurveTo(size, size / 3, size / 2, -size / 2, 0, 0);
+                this.ctx.fill();
+                this.ctx.restore();
+            }
+
+            drawCatEye(x, y, isBlinking, pupilX, pupilY) {
+                this.ctx.save();
+                this.ctx.translate(x, y);
+
+                if (isBlinking) {
+                    this.ctx.lineWidth = 5;
+                    this.ctx.strokeStyle = '#000000';
+                    this.ctx.beginPath();
+                    this.ctx.arc(0, 0, 32, 0.2 * Math.PI, 0.8 * Math.PI);
+                    this.ctx.stroke();
+                } else {
+                    this.ctx.beginPath();
+                    this.ctx.ellipse(0, 0, 34, 48, 0, 0, Math.PI * 2);
+                    this.ctx.fillStyle = '#000000';
+                    this.ctx.fill();
+                    this.ctx.lineWidth = 3;
+                    this.ctx.strokeStyle = '#ffffff';
+                    this.ctx.stroke();
+
+                    this.ctx.fillStyle = '#ffffff';
+                    this.ctx.beginPath();
+                    this.ctx.arc(-8 + pupilX, -14 + pupilY, 11, 0, Math.PI * 2);
+                    this.ctx.arc(8 + pupilX, 12 + pupilY, 6, 0, Math.PI * 2);
+                    this.ctx.fill();
+                }
+
+                this.ctx.restore();
+            }
+
+            drawObstacles() {
+                const p = this.planet;
+
+                this.obstacles.forEach((obs) => {
+                    const angle = obs.angle + p.angle;
+                    const x = p.x + p.radius * Math.cos(angle);
+                    const y = p.y + p.radius * Math.sin(angle);
+
+                    this.ctx.save();
+                    this.ctx.translate(x, y);
+                    this.ctx.rotate(angle + Math.PI / 2);
+
+                    this.ctx.fillStyle = obs.color || '#ff0055';
+                    this.ctx.strokeStyle = '#ffffff';
+                    this.ctx.lineWidth = 2.5;
+
+                    if (obs.type === 'spike') {
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(0, -obs.height);
+                        this.ctx.lineTo(-obs.width / 2, 0);
+                        this.ctx.lineTo(obs.width / 2, 0);
+                        this.ctx.closePath();
+                        this.ctx.fill();
+                        this.ctx.stroke();
+                    } else if (obs.type === 'double_spike') {
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(-obs.width * 0.3, -obs.height);
+                        this.ctx.lineTo(-obs.width / 2, 0);
+                        this.ctx.lineTo(0, 0);
+                        this.ctx.moveTo(obs.width * 0.3, -obs.height * 0.85);
+                        this.ctx.lineTo(0, 0);
+                        this.ctx.lineTo(obs.width / 2, 0);
+                        this.ctx.closePath();
+                        this.ctx.fill();
+                        this.ctx.stroke();
+                    } else if (obs.type === 'box') {
+                        this.ctx.fillRect(-obs.width / 2, -obs.height, obs.width, obs.height);
+                        this.ctx.strokeRect(-obs.width / 2, -obs.height, obs.width, obs.height);
+                    } else if (obs.type === 'yarn_ball') {
+                        this.ctx.beginPath();
+                        this.ctx.arc(0, -obs.height / 2, obs.height / 2, 0, Math.PI * 2);
+                        this.ctx.fill();
+                        this.ctx.stroke();
+                        this.ctx.strokeStyle = '#000000';
+                        this.ctx.beginPath();
+                        this.ctx.arc(-2, -obs.height / 2, obs.height / 3, 0.2, Math.PI);
+                        this.ctx.stroke();
+                    } else if (obs.type === 'fish_bone') {
+                        this.ctx.fillStyle = '#e2e8f0';
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(0, -obs.height);
+                        this.ctx.lineTo(-12, -obs.height + 10);
+                        this.ctx.lineTo(0, -obs.height + 15);
+                        this.ctx.lineTo(12, -obs.height + 10);
+                        this.ctx.closePath();
+                        this.ctx.fill();
+                        this.ctx.stroke();
+                        this.ctx.fillRect(-2, -obs.height + 15, 4, obs.height - 15);
+                    } else if (obs.type === 'cat_tree') {
+                        this.ctx.fillStyle = '#854d0e';
+                        this.ctx.fillRect(-6, -obs.height, 12, obs.height);
+                        this.ctx.fillStyle = obs.color;
+                        this.ctx.fillRect(-obs.width / 2, -obs.height, obs.width, 10);
+                        this.ctx.strokeRect(-obs.width / 2, -obs.height, obs.width, 10);
+                    } else if (obs.type === 'laser_hurdle') {
+                        this.ctx.fillStyle = '#38bdf8';
+                        this.ctx.fillRect(-obs.width / 2, -obs.height, 6, obs.height);
+                        this.ctx.fillRect(obs.width / 2 - 6, -obs.height, 6, obs.height);
+                        this.ctx.fillStyle = '#f43f5e';
+                        this.ctx.fillRect(-obs.width / 2, -obs.height + 4, obs.width, 8);
+                    }
+
+                    this.ctx.restore();
+                });
+            }
+
+            drawPlayers() {
+                const p = this.planet;
+
+                this.players.forEach((player) => {
+                    if (player.isEliminated) return;
+
+                    const angle = player.angle;
+                    const dist = p.radius + player.height;
+                    const x = p.x + dist * Math.cos(angle);
+                    const y = p.y + dist * Math.sin(angle);
+
+                    this.ctx.save();
+                    this.ctx.translate(x, y);
+                    this.ctx.rotate(angle + Math.PI / 2);
+
+                    this.drawStickman(player);
+                    this.drawNameplate(player);
+
+                    this.ctx.restore();
+                });
+            }
+
+            drawStickman(player) {
+                this.ctx.strokeStyle = player.color;
+                this.ctx.lineWidth = 3.5;
+                this.ctx.lineCap = 'round';
+
+                const isJumping = !player.isGrounded;
+
+                // Head Circle
+                this.ctx.beginPath();
+                this.ctx.arc(0, -42, 9, 0, Math.PI * 2);
+                this.ctx.fillStyle = '#ffffff';
+                this.ctx.fill();
+                this.ctx.stroke();
+
+                // Torso Line
+                this.ctx.beginPath();
+                this.ctx.moveTo(0, -33);
+                this.ctx.lineTo(0, -15);
+                this.ctx.stroke();
+
+                if (isJumping) {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(0, -28);
+                    this.ctx.lineTo(-12, -40);
+                    this.ctx.moveTo(0, -28);
+                    this.ctx.lineTo(12, -40);
+                    this.ctx.stroke();
+
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(0, -15);
+                    this.ctx.lineTo(-10, -5);
+                    this.ctx.moveTo(0, -15);
+                    this.ctx.lineTo(10, -5);
+                    this.ctx.stroke();
+                } else {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(0, -28);
+                    this.ctx.lineTo(-10, -18);
+                    this.ctx.moveTo(0, -28);
+                    this.ctx.lineTo(10, -18);
+
+                    this.ctx.moveTo(0, -15);
+                    this.ctx.lineTo(-8, 0);
+                    this.ctx.moveTo(0, -15);
+                    this.ctx.lineTo(8, 0);
+                    this.ctx.stroke();
+                }
+
+                if (player.meowTimer > 0) {
+                    this.ctx.fillStyle = '#ffffff';
+                    this.ctx.strokeStyle = '#000000';
+                    this.ctx.lineWidth = 1.5;
+                    this.ctx.beginPath();
+                    if (this.ctx.roundRect) {
+                        this.ctx.roundRect(-24, -68, 48, 20, 6);
+                    } else {
+                        this.ctx.rect(-24, -68, 48, 20);
+                    }
+                    this.ctx.fill();
+                    this.ctx.stroke();
+
+                    this.ctx.fillStyle = '#e11d48';
+                    this.ctx.font = 'bold 10px sans-serif';
+                    this.ctx.textAlign = 'center';
+                    this.ctx.fillText('🐾 MEOW!', 0, -54);
+                }
+            }
+
+            drawNameplate(player) {
+                this.ctx.font = 'bold 11px sans-serif';
+                const textWidth = this.ctx.measureText(player.name).width;
+
+                this.ctx.fillStyle = 'rgba(15, 23, 42, 0.8)';
+                this.ctx.fillRect(-textWidth / 2 - 6, -82, textWidth + 12, 16);
+
+                this.ctx.fillStyle = player.color;
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText(player.name, 0, -70);
+            }
+
+            loop(now) {
+                const dt = Math.min((now - this.lastFrameTime) / 1000, 0.1);
+                this.lastFrameTime = now;
+
+                this.updatePhysics(dt);
+                this.render();
+
+                requestAnimationFrame((timestamp) => this.loop(timestamp));
+            }
+        }
+
+        class MobileController {
+            constructor() {
+                this.peer = null;
+                this.conn = null;
+                this.bc = null;
+                this.clientId = 'client-' + Math.random().toString(36).substring(2, 7);
+                this.roomId = null;
+                this.player = {
+                    name: 'Gato' + Math.floor(Math.random() * 900 + 100),
+                    color: PLAYER_COLORS[0].hex
+                };
+                this.inputState = { jump: false, meow: false };
+                this.pingTimer = null;
+            }
+
+            init(roomId) {
+                this.roomId = roomId;
+
+                document.getElementById('host-view').classList.add('hidden');
+                document.getElementById('controller-view').classList.remove('hidden');
+
+                this.renderColorPicker();
+                this.initBroadcastChannel();
+
+                try {
+                    this.peer = new Peer({ debug: 1 });
+
+                    this.peer.on('open', () => {
+                        this.connectToHost();
+                    });
+
+                    this.peer.on('error', (err) => {
+                        document.getElementById('controller-state-msg').innerText = '🟡 Usando Modo Canal Local';
+                        this.sendBroadcastJoin();
+                    });
+                } catch (e) {
+                    document.getElementById('controller-state-msg').innerText = '🟡 Usando Modo Canal Local';
+                    this.sendBroadcastJoin();
+                }
+
+                this.bindTouchEvents();
+            }
+
+            initBroadcastChannel() {
+                try {
+                    this.bc = new BroadcastChannel('gato-planet-' + this.roomId);
+                    this.bc.onmessage = (event) => {
+                        const { targetId, data } = event.data || {};
+                        if (targetId && targetId !== this.clientId) return;
+
+                        if (data && data.type === 'WELCOME') {
+                            document.getElementById('controller-player-name').innerText = this.player.name;
+                            document.getElementById('controller-state-msg').innerText = '✅ ¡Conectado por Canal Local!';
+                        } else if (data && data.type === 'KICKED') {
+                            document.getElementById('controller-state-msg').innerText = '⚠️ Has sido expulsado de la sala.';
+                        }
+                    };
+                } catch (e) {
+                    console.warn('BroadcastChannel error:', e);
+                }
+            }
+
+            sendBroadcastJoin() {
+                if (this.bc) {
+                    this.bc.postMessage({
+                        senderId: this.clientId,
+                        data: {
+                            type: 'CLIENT_JOIN',
+                            player: { name: this.player.name, color: this.player.color }
+                        }
+                    });
+                }
+            }
+
+            connectToHost() {
+                document.getElementById('controller-state-msg').innerText = '🔄 Conectando a la sala ' + this.roomId + '...';
+                this.conn = this.peer.connect(this.roomId);
+
+                this.conn.on('open', () => {
+                    document.getElementById('controller-state-msg').innerText = '✅ ¡Conectado P2P! Listo para jugar.';
+                    this.conn.send({
+                        type: 'UPDATE_PROFILE',
+                        name: this.player.name,
+                        color: this.player.color
+                    });
+
+                    this.pingTimer = setInterval(() => {
+                        if (this.conn && this.conn.open) {
+                            this.conn.send({ type: 'PING' });
+                        }
+                    }, 2000);
+                });
+
+                this.conn.on('data', (data) => {
+                    if (data.type === 'WELCOME') {
+                        document.getElementById('controller-player-name').innerText = this.player.name;
+                    } else if (data.type === 'KICKED') {
+                        document.getElementById('controller-state-msg').innerText = '⚠️ Has sido expulsado de la sala.';
+                    } else if (data.type === 'PING') {
+                        this.conn.send({ type: 'PONG' });
+                    }
+                });
+
+                this.conn.on('close', () => {
+                    document.getElementById('controller-state-msg').innerText = '🔌 Conexión P2P cerrada por el Host.';
+                });
+            }
+
+            renderColorPicker() {
+                const picker = document.getElementById('controller-color-picker');
+                picker.innerHTML = '';
+                PLAYER_COLORS.forEach((col) => {
+                    const btn = document.createElement('button');
+                    btn.className = 'w-7 h-7 rounded-full border-2 border-slate-700 transition transform active:scale-95';
+                    btn.style.backgroundColor = col.hex;
+                    btn.onclick = () => {
+                        this.player.color = col.hex;
+                        document.getElementById('controller-color-indicator').style.backgroundColor = col.hex;
+                        this.sendProfileUpdate();
+                    };
+                    picker.appendChild(btn);
+                });
+                document.getElementById('controller-color-indicator').style.backgroundColor = this.player.color;
+            }
+
+            updateName() {
+                const input = document.getElementById('controller-name-input');
+                if (input.value.trim()) {
+                    this.player.name = input.value.trim();
+                    document.getElementById('controller-player-name').innerText = this.player.name;
+                    this.sendProfileUpdate();
+                }
+            }
+
+            sendProfileUpdate() {
+                const payload = {
+                    type: 'UPDATE_PROFILE',
+                    name: this.player.name,
+                    color: this.player.color
+                };
+                if (this.conn && this.conn.open) {
+                    this.conn.send(payload);
+                }
+                if (this.bc) {
+                    this.bc.postMessage({ senderId: this.clientId, data: payload });
+                }
+            }
+
+            bindTouchEvents() {
+                const setupButton = (id, key) => {
+                    const btn = document.getElementById(id);
+                    if (!btn) return;
+
+                    const handleDown = (e) => {
+                        e.preventDefault();
+                        this.inputState[key] = true;
+                        if (navigator.vibrate) navigator.vibrate(15);
+                        this.sendInput();
+                    };
+                    const handleUp = (e) => {
+                        e.preventDefault();
+                        this.inputState[key] = false;
+                        this.sendInput();
+                    };
+
+                    btn.addEventListener('touchstart', handleDown);
+                    btn.addEventListener('touchend', handleUp);
+                    btn.addEventListener('mousedown', handleDown);
+                    btn.addEventListener('mouseup', handleUp);
+                };
+
+                setupButton('btn-jump', 'jump');
+                setupButton('btn-meow', 'meow');
+            }
+
+            sendInput() {
+                const payload = {
+                    type: 'INPUT',
+                    input: this.inputState
+                };
+                if (this.conn && this.conn.open) {
+                    this.conn.send(payload);
+                }
+                if (this.bc) {
+                    this.bc.postMessage({ senderId: this.clientId, data: payload });
+                }
+            }
+        }
+
+        // Window load routing
+        let game = null;
+        let controller = null;
+
+        window.onload = () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const roomIdParam = urlParams.get('room');
+
+            if (roomIdParam) {
+                controller = new MobileController();
+                controller.init(roomIdParam);
+            } else {
+                game = new CatPlanetGame();
+                game.initPeerHost();
+                requestAnimationFrame((now) => game.loop(now));
+            }
+        };
+    </script>
+</body>
+</html>
