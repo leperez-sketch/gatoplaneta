@@ -2,526 +2,1146 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Gato Planeta - Battle Royale</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- PeerJS para multijugador P2P -->
+    <!-- PeerJS for WebRTC P2P multiplayer -->
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-    <!-- QRCode JS -->
+    <!-- QRCode.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Press+Start+2P&display=swap" rel="stylesheet">
+    
     <style>
-        * {
+        body {
+            font-family: 'Fredoka', sans-serif;
+            background-color: #0f172a;
+            color: #ffffff;
+            overflow: hidden;
             user-select: none;
             -webkit-user-select: none;
             touch-action: manipulation;
         }
-        body {
-            overflow: hidden;
-            background-color: #080914;
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        .font-pixel {
+            font-family: 'Press Start 2P', cursive;
         }
-        canvas {
-            display: block;
+        @keyframes pulse-glow {
+            0%, 100% { transform: scale(1); filter: drop-shadow(0 0 15px rgba(234, 179, 8, 0.8)); }
+            50% { transform: scale(1.05); filter: drop-shadow(0 0 25px rgba(236, 72, 153, 0.9)); }
         }
-        .btn-active:active {
-            transform: scale(0.95);
+        .meow-text {
+            animation: pulse-glow 0.8s infinite ease-in-out;
+            background: linear-gradient(180deg, #ffe600 0%, #ff0055 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
-        /* Custom Scrollbar para el lobby */
+        @keyframes speed-banner-anim {
+            0% { transform: translateY(-100%) scale(0.8); opacity: 0; }
+            15% { transform: translateY(0) scale(1.1); opacity: 1; }
+            85% { transform: translateY(0) scale(1); opacity: 1; }
+            100% { transform: translateY(-100%) scale(0.8); opacity: 0; }
+        }
+        .animate-speed-banner {
+            animation: speed-banner-anim 2.5s forwards ease-out;
+        }
+        .btn-touch {
+            touch-action: none;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            transition: transform 0.05s ease, background-color 0.1s ease;
+        }
+        .btn-touch:active {
+            transform: scale(0.92);
+        }
         ::-webkit-scrollbar {
             width: 6px;
         }
         ::-webkit-scrollbar-track {
             background: rgba(15, 23, 42, 0.6);
-            border-radius: 8px;
         }
         ::-webkit-scrollbar-thumb {
-            background: #ec4899;
-            border-radius: 8px;
+            background: #f59e0b;
+            border-radius: 4px;
         }
     </style>
 </head>
-<body class="text-white h-screen w-screen flex flex-col justify-center items-center relative">
+<body class="h-screen w-screen flex flex-col justify-between items-center relative overflow-hidden bg-slate-900">
 
-    <!-- ========================================================= -->
-    <!-- 1. SELECCIÓN DE MODO DE JUEGO (HOST O MÓVIL)             -->
-    <!-- ========================================================= -->
-    <div id="mode-selector" class="absolute z-50 flex flex-col items-center gap-6 bg-slate-900/95 p-8 rounded-3xl border border-pink-500/40 backdrop-blur-xl shadow-2xl max-w-md w-11/12">
-        <div class="text-center">
-            <h1 class="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-purple-400 to-orange-400 tracking-wider">GATO PLANETA</h1>
-            <p class="text-xs text-pink-300 font-semibold tracking-widest mt-1">BATTLE ROYALE MULTIJUGADOR</p>
-        </div>
-        <p class="text-slate-300 text-sm text-center leading-relaxed">
-            Selecciona el rol de este dispositivo. Para jugar en grupo, abre la Pantalla Principal en una PC o TV y conecta los móviles como controles.
-        </p>
-        <div class="flex flex-col w-full gap-3">
-            <button onclick="initHostMode()" class="w-full py-4 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 rounded-2xl font-black text-sm tracking-wider shadow-lg shadow-pink-600/30 transition btn-active flex items-center justify-center gap-3">
-                <span class="text-xl">🖥️</span> PANTALLA PRINCIPAL (HOST)
-            </button>
-            <button onclick="initControllerMode()" class="w-full py-4 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 rounded-2xl font-black text-sm tracking-wider shadow-lg shadow-orange-500/30 transition btn-active flex items-center justify-center gap-3">
-                <span class="text-xl">📱</span> CONTROL MÓVIL
-            </button>
-        </div>
-    </div>
-
-    <!-- ========================================================= -->
-    <!-- 2. VISTA DE LA PANTALLA PRINCIPAL (GAME HOST)            -->
-    <!-- ========================================================= -->
-    <div id="host-view" class="relative w-full h-full hidden flex-col items-center justify-center">
-        <!-- CANVAS PRINCIPAL -->
-        <canvas id="gameCanvas" class="w-full h-full"></canvas>
-
-        <!-- LOBBY & CÓDIGO QR OVERLAY -->
-        <div id="lobby-overlay" class="absolute top-6 left-6 bg-slate-900/90 p-5 rounded-3xl border border-slate-700/60 backdrop-blur-md flex flex-col gap-3 min-w-[280px] max-w-xs shadow-2xl">
-            <div class="flex items-center justify-between">
-                <h2 class="text-lg font-black text-pink-400 flex items-center gap-2">
-                    <span>🐱</span> Sala de Espera
-                </h2>
-                <span id="connection-status" class="w-3 h-3 rounded-full bg-yellow-400 animate-pulse"></span>
+    <!-- MAIN CANVAS GAME VIEW (HOST VIEW) -->
+    <div id="host-view" class="relative w-full h-full flex flex-col items-center justify-center">
+        <!-- TOP HEADER / NAV BAR WITH VOLUME CONTROL -->
+        <header class="absolute top-0 left-0 right-0 z-20 flex justify-between items-center px-4 py-3 bg-slate-900/80 backdrop-blur-md border-b border-slate-700/50">
+            <div class="flex items-center space-x-3">
+                <span class="text-2xl">🐱🪐</span>
+                <h1 class="text-xl md:text-2xl font-bold tracking-wide text-yellow-400">GATO PLANETA <span class="text-xs px-2 py-0.5 bg-yellow-500/20 text-yellow-300 rounded-full border border-yellow-500/40">BATTLE ROYALE</span></h1>
             </div>
-            
-            <!-- Contenedor QR -->
-            <div class="p-3 bg-white rounded-2xl self-center my-1 shadow-inner flex justify-center items-center">
-                <div id="qrcode"></div>
-            </div>
-            
-            <p class="text-xs text-slate-400 text-center">
-                Escanea el QR o escribe el ID:<br>
-                <span id="host-id-display" class="font-mono text-yellow-300 font-extrabold text-base tracking-widest">Generando...</span>
-            </p>
-
-            <!-- Lista de Jugadores -->
-            <div class="bg-slate-950/60 rounded-2xl p-2 border border-slate-800/80">
-                <div class="text-[10px] font-bold text-slate-400 px-2 py-1 uppercase tracking-wider">Jugadores Unidos</div>
-                <div id="player-list" class="flex flex-col gap-1.5 max-h-36 overflow-y-auto p-1">
-                    <!-- Jugadores dinámicos -->
+            <div id="host-header-status" class="flex items-center space-x-3">
+                <div class="hidden sm:flex items-center space-x-2 bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700 text-sm">
+                    <span class="text-slate-400">Código:</span>
+                    <span id="room-code-display" class="font-mono font-bold text-yellow-400 tracking-wider">Cargando...</span>
                 </div>
-            </div>
-
-            <div class="flex gap-2 mt-1">
-                <button onclick="addBot()" class="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 rounded-xl text-xs font-bold transition border border-slate-700 flex items-center justify-center gap-1">
-                    🤖 +Bot
-                </button>
-                <button onclick="startGame()" class="flex-1 py-2.5 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 rounded-xl text-xs font-black transition shadow-lg shadow-pink-600/30">
-                    🚀 EMPEZAR
-                </button>
-            </div>
-        </div>
-
-        <!-- HUD DEL JUEGO -->
-        <div id="game-hud" class="absolute top-6 right-6 flex flex-col items-end gap-2 pointer-events-none hidden">
-            <div class="bg-slate-900/90 px-5 py-3 rounded-2xl border border-slate-700/60 backdrop-blur-md flex items-center gap-5 shadow-xl">
-                <div class="text-center">
-                    <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">RONDA</div>
-                    <div id="hud-round" class="text-3xl font-black text-yellow-400">1</div>
-                </div>
-                <div class="h-8 w-px bg-slate-700/80"></div>
-                <div class="text-center">
-                    <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">SUPERVIVIENTES</div>
-                    <div id="hud-alive" class="text-3xl font-black text-green-400">0</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- BANNER DE NOTIFICACIONES (GIRO, REGENERACIÓN, RONDAS) -->
-        <div id="banner-message" class="absolute top-1/4 transition-all duration-300 transform -translate-y-1/2 scale-0 bg-gradient-to-r from-slate-900/95 via-purple-950/95 to-slate-900/95 text-yellow-300 border-2 border-yellow-400/50 px-8 py-4 rounded-3xl text-2xl font-black backdrop-blur-xl shadow-2xl pointer-events-none text-center max-w-xl">
-            ¡NOTIFICACIÓN!
-        </div>
-    </div>
-
-    <!-- ========================================================= -->
-    <!-- 3. VISTA DEL CONTROL REMOTO MÓVIL                         -->
-    <!-- ========================================================= -->
-    <div id="controller-view" class="relative w-full h-full hidden flex-col justify-between p-6 bg-slate-950">
-        <!-- FORMULARIO DE CONEXIÓN -->
-        <div id="controller-setup" class="flex flex-col gap-4 max-w-sm mx-auto my-auto w-full bg-slate-900 p-6 rounded-3xl border border-slate-800 shadow-2xl">
-            <h2 class="text-2xl font-black text-center text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-orange-400">UNIRSE A LA SALA</h2>
-            
-            <div>
-                <label class="text-xs font-bold text-slate-400 block mb-1">CÓDIGO DE SALA</label>
-                <input type="text" id="join-room-id" class="w-full bg-slate-800 border border-slate-700 rounded-2xl px-4 py-3 font-mono text-center text-xl text-yellow-300 uppercase tracking-widest focus:outline-none focus:border-pink-500 transition" placeholder="GATO1234">
-            </div>
-            
-            <div>
-                <label class="text-xs font-bold text-slate-400 block mb-1">TU NOMBRE DE GATO</label>
-                <input type="text" id="player-name" class="w-full bg-slate-800 border border-slate-700 rounded-2xl px-4 py-3 text-center text-lg text-white font-bold focus:outline-none focus:border-pink-500 transition" placeholder="MichiGamer" maxlength="12">
-            </div>
-
-            <div>
-                <label class="text-xs font-bold text-slate-400 block mb-2">ELIGE TU COLOR</label>
-                <div class="flex justify-between gap-2" id="color-picker">
-                    <!-- Colores renderizados por JS -->
-                </div>
-            </div>
-
-            <button onclick="connectToHost()" class="w-full py-4 bg-gradient-to-r from-pink-600 to-purple-600 rounded-2xl font-black text-lg shadow-lg shadow-pink-600/30 active:scale-95 transition mt-2">
-                ¡ENTRAR AL PLANETA!
-            </button>
-        </div>
-
-        <!-- CONTROLES TÁCTILES DEL MÓVIL -->
-        <div id="controller-pad" class="hidden flex-col h-full justify-between w-full max-w-md mx-auto py-4">
-            <div class="flex justify-between items-center bg-slate-900/90 p-4 rounded-2xl border border-slate-800 shadow-lg backdrop-blur">
-                <div class="flex items-center gap-3">
-                    <div id="pad-color-indicator" class="w-6 h-6 rounded-full border-2 border-white shadow"></div>
-                    <span id="pad-player-name" class="font-bold text-lg">Gato</span>
-                </div>
-                <div id="pad-status" class="text-xs px-3 py-1 bg-green-500/20 text-green-400 rounded-full font-black border border-green-500/30">¡EN JUEGO!</div>
-            </div>
-
-            <div class="flex flex-col gap-5 my-auto w-full">
-                <button id="btn-jump" class="w-full py-16 bg-gradient-to-b from-pink-500 to-purple-700 rounded-3xl font-black text-4xl shadow-2xl active:scale-95 transition border-b-8 border-purple-900 flex flex-col items-center justify-center gap-2 text-white">
-                    <span class="text-5xl">🦘</span>
-                    <span>¡SALTAR!</span>
-                </button>
                 
-                <button id="btn-meow" class="w-full py-8 bg-gradient-to-b from-amber-500 to-orange-600 rounded-2xl font-black text-2xl shadow-xl active:scale-95 transition border-b-4 border-orange-800 flex items-center justify-center gap-2 text-white">
-                    <span class="text-3xl">😺</span>
-                    <span>¡MAULLAR!</span>
-                </button>
+                <!-- VOLUME CONTROL CONTAINER -->
+                <div class="flex items-center space-x-2 bg-slate-800/90 px-3 py-1.5 rounded-lg border border-slate-700 text-sm">
+                    <span id="sound-icon" class="text-base cursor-pointer" onclick="game.toggleAudio()">🔊</span>
+                    <input id="volume-slider" type="range" min="0" max="1" step="0.05" value="0.7" oninput="game.setVolume(this.value)" class="w-16 sm:w-24 accent-yellow-400 cursor-pointer h-1.5 bg-slate-700 rounded-lg">
+                    <button id="sound-toggle-btn" onclick="game.toggleAudio()" class="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 text-yellow-300 rounded text-xs font-semibold border border-slate-600 transition">
+                        <span id="sound-text">Mute</span>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- GAME CANVAS -->
+        <canvas id="gameCanvas" class="w-full h-full block bg-slate-950"></canvas>
+
+        <!-- LOBBY OVERLAY CONTAINER -->
+        <div id="lobby-modal" class="absolute inset-0 z-30 flex items-center justify-center bg-slate-950/85 backdrop-blur-md p-4">
+            <div class="max-w-4xl w-full bg-slate-900/90 border-2 border-yellow-500/50 rounded-2xl p-6 shadow-2xl shadow-yellow-500/10 flex flex-col md:flex-row gap-6">
+                <!-- LEFT PANEL: QR CODE & ROOM INFO -->
+                <div class="flex-1 flex flex-col items-center justify-center bg-slate-800/60 p-5 rounded-xl border border-slate-700 text-center">
+                    <h2 class="text-lg font-bold text-yellow-400 mb-1">📱 Escanea para Jugar desde el Celular</h2>
+                    <p class="text-xs text-slate-300 mb-4">Usa la cámara de tu teléfono para conectar tu mando virtual</p>
+                    
+                    <div class="bg-white p-3 rounded-xl shadow-lg border-4 border-yellow-400 flex items-center justify-center mb-4">
+                        <div id="qrcode" class="w-44 h-44 flex items-center justify-center text-slate-900">
+                            <span class="text-xs font-mono animate-pulse">Generando QR...</span>
+                        </div>
+                    </div>
+
+                    <div class="w-full bg-slate-950/80 p-3 rounded-lg border border-slate-700 flex flex-col items-center gap-2">
+                        <div class="flex items-center justify-between w-full">
+                            <span class="text-xs text-slate-400">Código de Sala:</span>
+                            <div class="flex items-center gap-2">
+                                <span id="lobby-connection-status" class="text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold">Cargando...</span>
+                                <span id="lobby-room-code" class="font-mono text-lg font-bold text-yellow-300">----</span>
+                            </div>
+                        </div>
+                        <button onclick="game.copyJoinLink()" class="w-full py-1.5 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-300 text-xs rounded-md font-semibold border border-yellow-500/40 transition flex items-center justify-center gap-1">
+                            📋 Copiar Enlace Directo
+                        </button>
+                    </div>
+
+                    <div class="w-full mt-3 flex gap-2">
+                        <button onclick="game.addBotPlayer()" class="flex-1 py-2 bg-indigo-600/80 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg border border-indigo-400/30 transition">
+                            🤖 Añadir Bot
+                        </button>
+                        <button onclick="game.addKeyboardPlayer()" class="flex-1 py-2 bg-emerald-600/80 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg border border-emerald-400/30 transition">
+                            ⌨️ Añadir Teclado
+                        </button>
+                    </div>
+                </div>
+
+                <!-- RIGHT PANEL: PLAYER LIST & START GAME -->
+                <div class="flex-1 flex flex-col justify-between bg-slate-800/60 p-5 rounded-xl border border-slate-700">
+                    <div>
+                        <div class="flex justify-between items-center mb-3">
+                            <h3 class="text-base font-bold text-slate-200 flex items-center gap-2">
+                                👥 Jugadores Conectados <span id="player-count-badge" class="bg-yellow-500 text-slate-950 font-extrabold text-xs px-2 py-0.5 rounded-full">0</span>
+                            </h3>
+                            <span class="text-xs text-slate-400">Sin límite de jugadores</span>
+                        </div>
+                        
+                        <div id="player-list" class="h-56 overflow-y-auto space-y-2 pr-1">
+                            <div class="text-center py-10 text-slate-500 text-sm italic">
+                                Esperando a que los jugadores escaneen el código QR...
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 pt-4 border-t border-slate-700/80">
+                        <div class="mb-3 text-xs text-slate-400 bg-slate-950/50 p-2 rounded border border-slate-800 flex justify-between items-center">
+                            <span>🎮 Mando local en PC:</span>
+                            <span class="font-mono text-yellow-300">Espacio / Flecha Arriba (SALTAR) | M (MIAU)</span>
+                        </div>
+                        <button id="start-game-btn" onclick="game.startMatchFromLobby()" class="w-full py-4 bg-gradient-to-r from-yellow-500 via-amber-500 to-yellow-400 hover:from-yellow-400 hover:to-amber-300 text-slate-950 font-extrabold text-lg rounded-xl shadow-lg shadow-yellow-500/20 transform hover:-translate-y-0.5 transition active:translate-y-0">
+                            🚀 ¡INICIAR JUEGO!
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TRANSITION SCREEN OVERLAY ("MEOWWWW!!") -->
+        <div id="meow-transition-overlay" class="hidden absolute inset-0 z-40 bg-slate-950/95 flex flex-col items-center justify-center p-4">
+            <div class="text-center space-y-6">
+                <h2 class="meow-text text-6xl md:text-8xl font-black tracking-widest uppercase filter drop-shadow-2xl">
+                    MEOWWWW!!
+                </h2>
+                <div id="transition-countdown" class="text-7xl md:text-9xl font-pixel text-yellow-400 animate-bounce">
+                    3
+                </div>
+                <p class="text-xl md:text-2xl text-pink-300 font-bold tracking-wider">
+                    🐱 ¡Prepárate para saltar sobre el Gato Planeta! 🪐
+                </p>
+            </div>
+        </div>
+
+        <!-- SPEED INCREASE BANNER OVERLAY -->
+        <div id="speed-banner" class="hidden pointer-events-none absolute top-20 z-30 left-1/2 transform -translate-x-1/2 bg-gradient-to-r from-red-600 via-orange-500 to-red-600 text-white font-black px-6 py-3 rounded-2xl shadow-2xl border-2 border-yellow-300 text-center text-lg md:text-2xl">
+            ⚡ ¡MEOW! LA VELOCIDAD HA AUMENTADO ⚡
+        </div>
+
+        <!-- FLOATING TOAST NOTIFICATION -->
+        <div id="game-toast" class="hidden absolute bottom-6 z-50 bg-slate-900/90 text-yellow-300 border border-yellow-500/40 px-4 py-2 rounded-xl text-xs md:text-sm font-bold shadow-xl transition transform duration-300">
+        </div>
+
+        <!-- IN-GAME HUD OVERLAY -->
+        <div id="game-hud" class="hidden absolute top-16 left-4 right-4 z-20 flex justify-between items-start pointer-events-none">
+            <div class="bg-slate-900/80 backdrop-blur border border-slate-700/80 px-4 py-2 rounded-xl text-xs md:text-sm flex flex-col gap-1 shadow-lg">
+                <div class="flex items-center gap-2">
+                    <span class="text-slate-400">⏱️ Tiempo:</span>
+                    <span id="hud-timer" class="font-mono text-yellow-400 font-bold">00:00</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-slate-400">⚡ Vel. Planeta:</span>
+                    <span id="hud-speed" class="font-mono text-red-400 font-bold">1.0x</span>
+                </div>
+            </div>
+            <div class="bg-slate-900/80 backdrop-blur border border-slate-700/80 px-4 py-2 rounded-xl text-xs md:text-sm flex flex-col gap-1 shadow-lg text-right">
+                <div class="flex items-center justify-end gap-2">
+                    <span class="text-slate-400">🐱 Vivos:</span>
+                    <span id="hud-alive-count" class="font-mono text-emerald-400 font-bold text-base">0 / 0</span>
+                </div>
+                <span id="hud-status-msg" class="text-xs text-yellow-300 animate-pulse">¡Esquiva los obstáculos!</span>
+            </div>
+        </div>
+
+        <!-- WINNER / GAME OVER MODAL -->
+        <div id="winner-modal" class="hidden absolute inset-0 z-40 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
+            <div class="max-w-md w-full bg-slate-900 border-2 border-yellow-400 rounded-2xl p-6 text-center shadow-2xl space-y-4">
+                <div class="text-5xl animate-bounce">🏆</div>
+                <h2 class="text-2xl md:text-3xl font-extrabold text-yellow-400">¡GANADOR DE LA PARTIDA!</h2>
+                <div id="winner-name-display" class="text-3xl font-black text-pink-400 py-2 bg-slate-800/80 rounded-xl border border-pink-500/30">
+                    --
+                </div>
+                <p class="text-xs text-slate-300">¡Sobrevivió a la furia rotatoria del Gato Planeta!</p>
+                <div class="flex gap-3 pt-2">
+                    <button onclick="game.resetMatchToLobby()" class="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-bold rounded-xl border border-slate-700 transition">
+                        🏠 Volver al Lobby
+                    </button>
+                    <button onclick="game.startMatchFromLobby()" class="flex-1 py-3 bg-yellow-500 hover:bg-yellow-400 text-slate-950 text-sm font-extrabold rounded-xl transition">
+                        🔄 Jugar Otra Vez
+                    </button>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- ========================================================= -->
-    <!-- 4. LÓGICA JAVASCRIPT (PARTE 1)                           -->
-    <!-- ========================================================= -->
-    <script>
-        // --- CONSTANTES Y ESTADOS GLOBALES ---
-        const PLAYER_COLORS = ['#ff4757', '#2ed573', '#1e90ff', '#ffa502', '#e84393', '#9b59b6', '#00d2d3'];
-        let selectedColor = PLAYER_COLORS[0];
-        let peer = null;
-        let connections = [];
-        let hostConn = null;
-        let isHost = false;
-        let game = null;
+    <!-- MOBILE CONTROLLER VIEW (CLIENT / PHONE MODE) -->
+    <div id="controller-view" class="hidden fixed inset-0 z-50 bg-slate-950 flex flex-col justify-between p-4 touch-none select-none">
+        <header class="flex justify-between items-center bg-slate-900 p-3 rounded-xl border border-slate-800">
+            <div class="flex items-center space-x-2">
+                <span class="text-lg">🐾</span>
+                <span id="controller-player-name" class="font-bold text-yellow-400 text-sm">Jugador</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <div id="controller-color-indicator" class="w-5 h-5 rounded-full border-2 border-white shadow"></div>
+            </div>
+        </header>
 
-        // --- MOTOR DE SONIDO (VELOCIDAD Y TEMPO RIGUROSAMENTE CONSTANTE) ---
+        <div id="controller-status-screen" class="my-auto bg-slate-900/90 border border-slate-800 p-5 rounded-2xl text-center space-y-4">
+            <h2 class="text-xl font-bold text-yellow-400">🎮 Mando Gato Planeta</h2>
+            
+            <div class="space-y-2 text-left">
+                <label class="text-xs text-slate-400">Tu Nombre de Jugador:</label>
+                <div class="flex gap-2">
+                    <input type="text" id="controller-name-input" maxlength="12" class="flex-1 bg-slate-950 border border-slate-700 px-3 py-2 rounded-lg text-sm text-yellow-300 font-bold focus:outline-none focus:border-yellow-500" value="GatoGamer">
+                    <button onclick="controller.updateName()" class="px-3 py-2 bg-yellow-500 text-slate-950 font-bold text-xs rounded-lg">Guardar</button>
+                </div>
+            </div>
+
+            <div class="space-y-1 text-left">
+                <label class="text-xs text-slate-400">Color de tu Monigote:</label>
+                <div id="controller-color-picker" class="flex justify-between gap-1 pt-1">
+                </div>
+            </div>
+
+            <div id="controller-state-msg" class="text-xs py-2 px-3 bg-slate-950 text-yellow-300 rounded-lg font-mono border border-yellow-500/20">
+                ✅ Conectado a la Sala. ¡Esperando que el Host inicie!
+            </div>
+        </div>
+
+        <div id="controller-buttons" class="grid grid-cols-3 gap-3 h-64 w-full">
+            <button id="btn-jump" class="btn-touch col-span-3 bg-gradient-to-b from-yellow-500 to-amber-600 active:from-yellow-400 active:to-amber-500 border-2 border-yellow-300 rounded-2xl flex flex-col items-center justify-center shadow-xl text-slate-950 font-extrabold">
+                <span class="text-6xl">⬆️</span>
+                <span class="text-lg tracking-wider mt-2 font-pixel">¡SALTAR!</span>
+            </button>
+
+            <button id="btn-meow" class="btn-touch col-span-3 bg-pink-600/90 active:bg-pink-500 border-2 border-pink-400 rounded-2xl py-3 flex items-center justify-center gap-2 shadow-lg text-white font-bold text-base">
+                <span class="text-2xl">🐾</span>
+                <span>¡MAULLAR! (MEOW)</span>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Color Palette definitions
+        const PLAYER_COLORS = [
+            { name: 'Rosa Neon', hex: '#ff007f' },
+            { name: 'Cian Electrito', hex: '#00f0ff' },
+            { name: 'Verde Lima', hex: '#39ff14' },
+            { name: 'Naranja Fuego', hex: '#ff5500' },
+            { name: 'Morado Galaxia', hex: '#b026ff' },
+            { name: 'Amarillo Sol', hex: '#ffea00' },
+            { name: 'Blanco Nieve', hex: '#ffffff' },
+            { name: 'Rojo Carmesi', hex: '#ff0033' }
+        ];
+
+        // Sound Engine con control de volumen, BGM (W&W.mp3) y maullido (120.mp3)
         class SoundEngine {
             constructor() {
                 this.ctx = null;
-                this.bgmTimer = null;
-                this.isPlayingBgm = false;
-                this.beat = 0;
+                this.isMuted = false;
+                this.volume = 0.7; // Volumen predeterminado (0.0 a 1.0)
+                this.tempo = 140;
+                this.bgm = new Audio('W&W.mp3');
+                this.bgm.loop = true;
+                this.bgm.volume = this.volume;
+                this.meowAudio = new Audio('120.mp3');
+                this.meowAudio.volume = this.volume;
+                this.masterGain = null;
             }
 
             init() {
                 if (!this.ctx) {
-                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    if (AudioCtx) {
+                        this.ctx = new AudioCtx();
+                        this.masterGain = this.ctx.createGain();
+                        this.masterGain.gain.value = this.isMuted ? 0 : this.volume;
+                        this.masterGain.connect(this.ctx.destination);
+                    }
+                }
+                if (this.ctx && this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+
+            setVolume(val) {
+                this.volume = Math.max(0, Math.min(1, parseFloat(val)));
+                if (this.bgm) this.bgm.volume = this.isMuted ? 0 : this.volume;
+                if (this.meowAudio) this.meowAudio.volume = this.isMuted ? 0 : this.volume;
+                if (this.masterGain && this.ctx) {
+                    this.masterGain.gain.setValueAtTime(this.isMuted ? 0 : this.volume, this.ctx.currentTime);
                 }
             }
 
             playJump() {
-                if (!this.ctx) return;
-                const osc = this.ctx.createOscillator();
-                const gain = this.ctx.createGain();
-                osc.type = 'triangle';
-                osc.frequency.setValueAtTime(160, this.ctx.currentTime);
-                osc.frequency.exponentialRampToValueAtTime(450, this.ctx.currentTime + 0.15);
-                gain.gain.setValueAtTime(0.25, this.ctx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.15);
-                osc.connect(gain);
-                gain.connect(this.ctx.destination);
-                osc.start();
-                osc.stop(this.ctx.currentTime + 0.15);
-            }
-
-            playMeow() {
-                if (!this.ctx) return;
-                const osc = this.ctx.createOscillator();
-                const gain = this.ctx.createGain();
-                osc.type = 'sawtooth';
-                osc.frequency.setValueAtTime(280, this.ctx.currentTime);
-                osc.frequency.linearRampToValueAtTime(580, this.ctx.currentTime + 0.12);
-                osc.frequency.linearRampToValueAtTime(220, this.ctx.currentTime + 0.32);
-                gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.32);
-                osc.connect(gain);
-                gain.connect(this.ctx.destination);
-                osc.start();
-                osc.stop(this.ctx.currentTime + 0.32);
-            }
-
-            // LA MÚSICA SE MANTIENE A RITMO Y VELOCIDAD CONSTANTE (NO ACELERA CON EL JUEGO)
-            startBGM() {
-                if (this.isPlayingBgm) return;
+                if (this.isMuted || this.volume <= 0) return;
                 this.init();
-                this.isPlayingBgm = true;
+                if (!this.ctx) return;
 
-                // Tempo fijo: 124 BPM independiente de la velocidad del planeta
-                const interval = (60 / 124) * 1000 / 2;
-                this.bgmTimer = setInterval(() => {
-                    if (!this.isPlayingBgm || !this.ctx) return;
-                    this.playBgmBeat();
-                }, interval);
-            }
-
-            stopBGM() {
-                this.isPlayingBgm = false;
-                if (this.bgmTimer) clearInterval(this.bgmTimer);
-            }
-
-            playBgmBeat() {
                 const osc = this.ctx.createOscillator();
                 const gain = this.ctx.createGain();
                 osc.type = 'sine';
+                const now = this.ctx.currentTime;
 
-                const notes = [110, 110, 130, 110, 146, 130, 110, 98];
-                const freq = notes[this.beat % notes.length];
-                this.beat++;
+                osc.frequency.setValueAtTime(180, now);
+                osc.frequency.exponentialRampToValueAtTime(620, now + 0.15);
 
-                osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
-                gain.gain.setValueAtTime(0.07, this.ctx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.18);
+                gain.gain.setValueAtTime(0.25 * this.volume, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
 
                 osc.connect(gain);
-                gain.connect(this.ctx.destination);
-                osc.start();
-                osc.stop(this.ctx.currentTime + 0.18);
+                gain.connect(this.masterGain || this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.15);
+            }
+
+            playMeow() {
+                if (this.isMuted || this.volume <= 0) return;
+                this.init();
+                try {
+                    const soundClone = this.meowAudio.cloneNode();
+                    soundClone.volume = this.volume;
+                    soundClone.play().catch(e => console.log('Reproducción diferida de 120.mp3:', e));
+                } catch (e) {
+                    console.warn('Error al reproducir 120.mp3:', e);
+                }
+            }
+
+            playSpeedUp() {
+                if (this.isMuted || this.volume <= 0) return;
+                this.init();
+                if (!this.ctx) return;
+
+                const now = this.ctx.currentTime;
+                [300, 450, 600, 800].forEach((freq, idx) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(freq, now + idx * 0.08);
+
+                    gain.gain.setValueAtTime(0.15 * this.volume, now + idx * 0.08);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.08 + 0.08);
+
+                    osc.connect(gain);
+                    gain.connect(this.masterGain || this.ctx.destination);
+                    osc.start(now + idx * 0.08);
+                    osc.stop(now + idx * 0.08 + 0.08);
+                });
+            }
+
+            playHit() {
+                if (this.isMuted || this.volume <= 0) return;
+                this.init();
+                if (!this.ctx) return;
+
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.exponentialRampToValueAtTime(40, now + 0.25);
+
+                gain.gain.setValueAtTime(0.3 * this.volume, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+
+                osc.connect(gain);
+                gain.connect(this.masterGain || this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.25);
+            }
+
+            playWin() {
+                if (this.isMuted || this.volume <= 0) return;
+                this.init();
+                if (!this.ctx) return;
+
+                const now = this.ctx.currentTime;
+                const notes = [261.63, 329.63, 392.00, 523.25];
+                notes.forEach((freq, idx) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, now + idx * 0.12);
+
+                    gain.gain.setValueAtTime(0.25 * this.volume, now + idx * 0.12);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.12 + 0.25);
+
+                    osc.connect(gain);
+                    gain.connect(this.masterGain || this.ctx.destination);
+                    osc.start(now + idx * 0.12);
+                    osc.stop(now + idx * 0.12 + 0.25);
+                });
+            }
+
+            setBGMTempo(bpm) {
+                this.tempo = bpm;
+                if (this.bgm) {
+                    this.bgm.playbackRate = Math.min(Math.max(bpm / 140, 0.8), 2.0);
+                }
+            }
+
+            startBGM() {
+                if (this.isMuted) return;
+                this.init();
+                this.bgm.currentTime = 0;
+                this.bgm.volume = this.volume;
+                this.bgm.play().catch(e => console.log('Reproducción diferida de W&W.mp3:', e));
+            }
+
+            stopBGM() {
+                if (this.bgm) {
+                    this.bgm.pause();
+                    this.bgm.currentTime = 0;
+                }
             }
         }
 
-        const soundEngine = new SoundEngine();
+        const sound = new SoundEngine();
 
-        // --- MOTOR PRINCIPAL DEL JUEGO (GAME ENGINE) ---
-        class Game {
-            constructor(canvas) {
-                this.canvas = canvas;
-                this.ctx = canvas.getContext('2d');
-                this.resize();
-                window.addEventListener('resize', () => this.resize());
-
+        class CatPlanetGame {
+            constructor() {
+                this.canvas = document.getElementById('gameCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                
+                this.state = 'LOBBY';
                 this.players = new Map();
+                this.connections = new Map();
+                this.peer = null;
+                this.bc = null;
+                this.roomId = '';
+
+                this.planet = {
+                    x: 0,
+                    y: 0,
+                    radius: 320,
+                    angle: 0,
+                    baseSpeed: 0.32,
+                    speedMultiplier: 1.0,
+                    blinkTimer: 0,
+                    isBlinking: false,
+                    mouthOpen: 0,
+                    mouthTarget: 0,
+                    purrTimer: 0
+                };
+
+                this.matchTime = 0;
+                this.speedTimer = 0;
+                this.spawnTimer = 0;
+                this.nextSpawnInterval = 2.0;
+                this.meowWarningPlayed = false;
+                this.lastFrameTime = performance.now();
+
                 this.obstacles = [];
-                this.particles = [];
+                this.stars = [];
+                this.shootingStars = [];
+                this.shootingStarTimer = 0;
 
-                this.planetRadius = 230;
-                this.planetAngle = 0;
-                this.baseSpeed = 0.012;
-                this.gameSpeed = this.baseSpeed;
+                this.soundEnabled = true;
+                this.localKeys = { jump: false, meow: false };
 
-                // Sentido de Giro
-                this.rotationDirection = 1; // 1 = Horario (Derecha), -1 = Antihorario (Izquierda)
-                this.rotationTimer = 0;
-                this.nextRotationChange = this.getRandomInterval(15, 40);
-
-                // Temporizador de Regeneración de Obstáculos (10s)
-                this.obstacleTimer = 0;
-
-                this.currentRound = 1;
-                this.roundTimer = 0;
-                this.isRunning = false;
-
-                this.lastTime = performance.now();
+                this.initStars();
+                this.resizeCanvas();
+                window.addEventListener('resize', () => this.resizeCanvas());
+                this.setupKeyboardListeners();
             }
 
-            getRandomInterval(min, max) {
-                return Math.random() * (max - min) + min;
+            initStars() {
+                this.stars = [];
+                for (let i = 0; i < 45; i++) {
+                    this.stars.push({
+                        x: Math.random(),
+                        y: Math.random() * 0.65,
+                        radius: Math.random() * 4 + 2,
+                        haloRadius: Math.random() * 18 + 12,
+                        twinkleOffset: Math.random() * Math.PI * 2,
+                        twinkleSpeed: Math.random() * 2 + 1,
+                        color: Math.random() > 0.3 ? '#fde047' : '#f97316'
+                    });
+                }
+                this.shootingStars = [];
             }
 
-            resize() {
+            resizeCanvas() {
                 this.canvas.width = window.innerWidth;
                 this.canvas.height = window.innerHeight;
-                this.centerX = this.canvas.width / 2;
-                this.centerY = this.canvas.height / 2 + 110;
+                this.planet.x = this.canvas.width / 2;
+                this.planet.y = this.canvas.height + this.planet.radius * 0.22;
+                this.planet.radius = Math.min(this.canvas.width, this.canvas.height) * 0.52;
             }
 
-            addPlayer(id, name, color, isBot = false) {
-                this.players.set(id, {
-                    id,
-                    name,
-                    color,
-                    isBot,
-                    angle: Math.random() * Math.PI * 2,
-                    yOffset: 0,
-                    vy: 0,
-                    isGrounded: true,
-                    isAlive: true,
-                    score: 0,
-                    meowTimer: 0
+            setVolume(val) {
+                sound.setVolume(val);
+                const soundIcon = document.getElementById('sound-icon');
+                if (soundIcon) {
+                    if (val == 0 || sound.isMuted) soundIcon.innerText = '🔇';
+                    else if (val < 0.4) soundIcon.innerText = '🔉';
+                    else soundIcon.innerText = '🔊';
+                }
+            }
+
+            toggleAudio() {
+                this.soundEnabled = !this.soundEnabled;
+                sound.isMuted = !this.soundEnabled;
+                if (sound.isMuted) {
+                    sound.bgm.pause();
+                } else {
+                    if (this.state === 'PLAYING') sound.bgm.play().catch(() => {});
+                }
+                const slider = document.getElementById('volume-slider');
+                this.setVolume(sound.isMuted ? 0 : (slider ? slider.value : 0.7));
+                document.getElementById('sound-text').innerText = this.soundEnabled ? 'Mute' : 'Unmute';
+            }
+
+            initPeerHost() {
+                const randomCode = Math.random().toString(36).substring(2, 7).toUpperCase();
+                this.roomId = 'GATO-' + randomCode;
+
+                this.updateRoomCodeUI(this.roomId, 'Conectando...');
+                this.initBroadcastChannel();
+
+                try {
+                    this.peer = new Peer(this.roomId, { debug: 1 });
+
+                    this.peer.on('open', (id) => {
+                        this.updateRoomCodeUI(id, '🟢 P2P En Línea');
+                        this.generateQRCode(id);
+                    });
+
+                    this.peer.on('connection', (conn) => {
+                        this.handleClientConnection(conn);
+                    });
+
+                    this.peer.on('error', (err) => {
+                        this.updateRoomCodeUI(this.roomId, '🟡 Canal Local');
+                        this.generateQRCode(this.roomId);
+                    });
+                } catch (e) {
+                    this.updateRoomCodeUI(this.roomId, '🟡 Canal Local');
+                    this.generateQRCode(this.roomId);
+                }
+            }
+
+            initBroadcastChannel() {
+                try {
+                    this.bc = new BroadcastChannel('gato-planet-' + this.roomId);
+                    this.bc.onmessage = (event) => {
+                        const { senderId, data } = event.data || {};
+                        if (!senderId || !data) return;
+
+                        if (data.type === 'CLIENT_JOIN') {
+                            this.handleLocalClientJoin(senderId, data.player);
+                        } else {
+                            this.handleClientData(senderId, data);
+                        }
+                    };
+                } catch (e) {
+                    console.warn('BroadcastChannel error:', e);
+                }
+            }
+
+            updateRoomCodeUI(id, statusText) {
+                document.getElementById('room-code-display').innerText = id;
+                document.getElementById('lobby-room-code').innerText = id;
+                const statusBadge = document.getElementById('lobby-connection-status');
+                if (statusBadge) statusBadge.innerText = statusText;
+            }
+
+            generateQRCode(roomId) {
+                const qrContainer = document.getElementById('qrcode');
+                qrContainer.innerHTML = '';
+                const joinUrl = window.location.origin + window.location.pathname + '?room=' + roomId;
+                new QRCode(qrContainer, {
+                    text: joinUrl,
+                    width: 160,
+                    height: 160,
+                    colorDark: '#0f172a',
+                    colorLight: '#ffffff',
+                    correctLevel: QRCode.CorrectLevel.M
                 });
             }
 
-            removePlayer(id) {
-                this.players.delete(id);
+            copyJoinLink() {
+                const joinUrl = window.location.origin + window.location.pathname + '?room=' + this.roomId;
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(joinUrl).then(() => {
+                        this.showToast('📋 Enlace de invitación copiado!');
+                    }).catch(() => {
+                        this.showToast('Código de Sala: ' + this.roomId);
+                    });
+                } else {
+                    this.showToast('Código de Sala: ' + this.roomId);
+                }
             }
 
-            start() {
-                this.isRunning = true;
-                this.currentRound = 1;
-                this.gameSpeed = this.baseSpeed;
-                this.rotationDirection = 1;
-                this.rotationTimer = 0;
-                this.obstacleTimer = 0;
-                this.roundTimer = 0;
-                this.nextRotationChange = this.getRandomInterval(15, 40);
+            showToast(message) {
+                const toast = document.getElementById('game-toast');
+                if (!toast) return;
+                toast.innerText = message;
+                toast.classList.remove('hidden');
+                setTimeout(() => {
+                    toast.classList.add('hidden');
+                }, 3000);
+            }
 
-                let idx = 0;
-                const total = this.players.size;
-                this.players.forEach(p => {
-                    p.angle = (idx / Math.max(1, total)) * Math.PI * 2;
-                    p.yOffset = 0;
-                    p.vy = 0;
-                    p.isGrounded = true;
-                    p.isAlive = true;
-                    idx++;
+            handleClientConnection(conn) {
+                conn.on('open', () => {
+                    const playerId = conn.peer;
+                    this.registerNewPlayer(playerId);
+                    this.connections.set(playerId, conn);
+
+                    conn.send({
+                        type: 'WELCOME',
+                        player: { id: playerId, name: this.players.get(playerId).name, color: this.players.get(playerId).color },
+                        roomId: this.roomId
+                    });
+
+                    this.updateLobbyUI();
+
+                    conn.on('data', (data) => {
+                        this.handleClientData(playerId, data);
+                    });
+
+                    conn.on('close', () => {
+                        this.removePlayer(playerId);
+                    });
                 });
-
-                this.generateObstacles();
-                soundEngine.startBGM();
-                this.lastTime = performance.now();
-                requestAnimationFrame((t) => this.loop(t));
             }
 
-            // REGENERACIÓN DE OBSTÁCULOS CADA 10 SEGUNDOS
-            generateObstacles() {
-                this.obstacles = [];
-                const types = ['spike', 'crate', 'yarn', 'laser'];
-                const count = 8 + Math.floor(Math.random() * 5); // 8 a 12 trampas aleatorias
+            handleLocalClientJoin(senderId, clientInfo) {
+                if (!this.players.has(senderId)) {
+                    const player = this.registerNewPlayer(senderId);
+                    if (clientInfo && clientInfo.name) player.name = clientInfo.name;
+                    if (clientInfo && clientInfo.color) player.color = clientInfo.color;
+                    this.updateLobbyUI();
+                }
 
-                for (let i = 0; i < count; i++) {
-                    const angle = (i / count) * Math.PI * 2 + (Math.random() * 0.2);
-                    const type = types[Math.floor(Math.random() * types.length)];
-                    this.obstacles.push({
-                        angle: angle,
-                        type: type,
-                        width: 0.12,
-                        height: type === 'laser' ? 60 : 35
+                if (this.bc) {
+                    this.bc.postMessage({
+                        senderId: 'HOST',
+                        targetId: senderId,
+                        data: {
+                            type: 'WELCOME',
+                            player: { id: senderId, name: this.players.get(senderId).name, color: this.players.get(senderId).color },
+                            roomId: this.roomId
+                        }
                     });
                 }
             }
 
-            jumpPlayer(id) {
-                const p = this.players.get(id);
-                if (p && p.isAlive && p.isGrounded) {
-                    p.vy = 12.5;
-                    p.isGrounded = false;
-                    soundEngine.playJump();
+            registerNewPlayer(playerId) {
+                const defaultColor = PLAYER_COLORS[this.players.size % PLAYER_COLORS.length].hex;
+                const player = {
+                    id: playerId,
+                    name: 'Gato' + (this.players.size + 1),
+                    color: defaultColor,
+                    angle: -Math.PI / 2,
+                    homeAngle: -Math.PI / 2,
+                    height: 0,
+                    vy: 0,
+                    isGrounded: true,
+                    isEliminated: false,
+                    isBot: false,
+                    meowTimer: 0,
+                    animFrame: Math.random() * 10,
+                    ping: 15,
+                    lastPingTime: performance.now(),
+                    input: { jump: false, meow: false }
+                };
+
+                this.players.set(playerId, player);
+                return player;
+            }
+
+            handleClientData(playerId, data) {
+                const player = this.players.get(playerId);
+                if (!player) return;
+
+                if (data.type === 'INPUT') {
+                    player.input = data.input;
+                    if (data.input.meow && player.meowTimer <= 0) {
+                        player.meowTimer = 1.2;
+                        this.planet.mouthTarget = 1.0;
+                        sound.playMeow();
+                    }
+                } else if (data.type === 'UPDATE_PROFILE') {
+                    if (data.name) player.name = data.name.substring(0, 12);
+                    if (data.color) player.color = data.color;
+                    this.updateLobbyUI();
+                } else if (data.type === 'PONG') {
+                    player.ping = Math.round(performance.now() - player.lastPingTime);
                 }
             }
 
-            meowPlayer(id) {
-                const p = this.players.get(id);
-                if (p && p.isAlive) {
-                    p.meowTimer = 1.0;
-                    soundEngine.playMeow();
+            kickPlayer(playerId) {
+                const conn = this.connections.get(playerId);
+                if (conn) {
+                    conn.send({ type: 'KICKED' });
+                    conn.close();
                 }
+                if (this.bc) {
+                    this.bc.postMessage({ senderId: 'HOST', targetId: playerId, data: { type: 'KICKED' } });
+                }
+                this.removePlayer(playerId);
             }
 
-            update(dt) {
-                if (!this.isRunning) return;
+            removePlayer(playerId) {
+                this.players.delete(playerId);
+                this.connections.delete(playerId);
+                this.updateLobbyUI();
+            }
 
-                // 1. Aumento Progresivo de Dificultad (Acelera el planeta, NO la música)
-                this.roundTimer += dt;
-                if (this.roundTimer >= 15) {
-                    this.roundTimer = 0;
-                    this.currentRound++;
-                    this.gameSpeed += 0.0035;
-                    showBanner(`¡RONDA ${this.currentRound}! VELOCIDAD AUMENTADA`);
+            addBotPlayer() {
+                const botId = 'bot-' + Math.random().toString(36).substring(2, 7);
+                const color = PLAYER_COLORS[this.players.size % PLAYER_COLORS.length].hex;
+                const bot = {
+                    id: botId,
+                    name: '🤖 BotGato' + (this.players.size + 1),
+                    color: color,
+                    angle: -Math.PI / 2 + (Math.random() - 0.5) * 0.8,
+                    height: 0,
+                    vy: 0,
+                    isGrounded: true,
+                    isEliminated: false,
+                    isBot: true,
+                    meowTimer: 0,
+                    animFrame: Math.random() * 10,
+                    ping: 0,
+                    input: { jump: false, meow: false }
+                };
+                this.players.set(botId, bot);
+                this.updateLobbyUI();
+            }
+
+            addKeyboardPlayer() {
+                const localId = 'local-keyboard';
+                if (this.players.has(localId)) return;
+                const color = '#39ff14';
+                const p = {
+                    id: localId,
+                    name: '⌨️ Jugador PC',
+                    color: color,
+                    angle: -Math.PI / 2,
+                    height: 0,
+                    vy: 0,
+                    isGrounded: true,
+                    isEliminated: false,
+                    isBot: false,
+                    meowTimer: 0,
+                    animFrame: 0,
+                    ping: 0,
+                    input: this.localKeys
+                };
+                this.players.set(localId, p);
+                this.updateLobbyUI();
+            }
+
+            setupKeyboardListeners() {
+                window.addEventListener('keydown', (e) => {
+                    if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
+                        if (!this.localKeys.jump) {
+                            const p = this.players.get('local-keyboard');
+                            if (p && p.input) p.input.jump = true;
+                        }
+                        this.localKeys.jump = true;
+                    }
+                    if (e.code === 'KeyM') {
+                        this.localKeys.meow = true;
+                        const p = this.players.get('local-keyboard');
+                        if (p && p.meowTimer <= 0) {
+                            p.meowTimer = 1.2;
+                            this.planet.mouthTarget = 1.0;
+                            sound.playMeow();
+                        }
+                    }
+                });
+
+                window.addEventListener('keyup', (e) => {
+                    if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') this.localKeys.jump = false;
+                    if (e.code === 'KeyM') this.localKeys.meow = false;
+                });
+            }
+
+            updateLobbyUI() {
+                const playerList = document.getElementById('player-list');
+                const badge = document.getElementById('player-count-badge');
+                badge.innerText = this.players.size;
+
+                if (this.players.size === 0) {
+                    playerList.innerHTML = `<div class="text-center py-10 text-slate-500 text-sm italic">Esperando a que los jugadores escaneen el código QR...</div>`;
+                    return;
                 }
 
-                // 2. REGENERACIÓN DE OBSTÁCULOS CADA 10 SEGUNDOS
-                this.obstacleTimer += dt;
-                if (this.obstacleTimer >= 10) {
-                    this.obstacleTimer = 0;
-                    this.generateObstacles();
-                    showBanner("¡NUEVOS OBSTÁCULOS REGENERADOS!");
+                let html = '';
+                this.players.forEach((p) => {
+                    html += `
+                        <div class="flex items-center justify-between bg-slate-950/80 p-2.5 rounded-xl border border-slate-800">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-4 h-4 rounded-full border border-white" style="background-color: ${p.color}"></div>
+                                <span class="font-bold text-sm text-slate-200">${p.name}</span>
+                                ${p.isBot ? '<span class="text-[10px] bg-indigo-900 text-indigo-300 px-1.5 py-0.5 rounded">BOT</span>' : ''}
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <span class="text-xs font-mono text-slate-400">${p.isBot ? '--' : p.ping + 'ms'}</span>
+                                <button onclick="game.kickPlayer('${p.id}')" class="px-2 py-1 bg-red-600/20 hover:bg-red-600/40 text-red-400 text-xs rounded border border-red-500/30 transition">
+                                    Expulsar
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                });
+                playerList.innerHTML = html;
+            }
+
+            startMatchFromLobby() {
+                if (this.players.size === 0) {
+                    this.addBotPlayer();
                 }
 
-                // 3. CAMBIO DE GIRO ALEATORIO (PASADA LA RONDA 5, INTERVALOS DE 15 A 40 SEGUNDOS)
-                if (this.currentRound >= 5) {
-                    this.rotationTimer += dt;
-                    if (this.rotationTimer >= this.nextRotationChange) {
-                        this.rotationTimer = 0;
-                        this.nextRotationChange = this.getRandomInterval(15, 40);
-                        this.rotationDirection *= -1; // Invierte el sentido del giro
-                        showBanner("¡ATENCIÓN: EL PLANETA CAMBIÓ DE SENTIDO!");
+                document.getElementById('lobby-modal').classList.add('hidden');
+                document.getElementById('meow-transition-overlay').classList.remove('hidden');
+
+                sound.playMeow();
+
+                let count = 3;
+                const countdownElem = document.getElementById('transition-countdown');
+                countdownElem.innerText = count;
+
+                const timer = setInterval(() => {
+                    count--;
+                    if (count > 0) {
+                        countdownElem.innerText = count;
+                        sound.playJump();
+                    } else if (count === 0) {
+                        countdownElem.innerText = '¡A SALTAR!';
+                        sound.playMeow();
+                    } else {
+                        clearInterval(timer);
+                        document.getElementById('meow-transition-overlay').classList.add('hidden');
+                        document.getElementById('game-hud').classList.remove('hidden');
+                        this.initGameRound();
+                    }
+                }, 900);
+            }
+
+            initGameRound() {
+                this.state = 'PLAYING';
+                this.matchTime = 0;
+                this.speedTimer = 0;
+                this.spawnTimer = 0;
+                this.nextSpawnInterval = 1.8;
+                this.meowWarningPlayed = false;
+                this.planet.speedMultiplier = 1.0;
+                sound.setBGMTempo(140);
+                sound.startBGM();
+
+                this.obstacles = [];
+                const initialSpawnAngles = [-Math.PI * 0.9, -Math.PI * 0.7, -Math.PI * 0.5];
+                initialSpawnAngles.forEach(relAngle => {
+                    this.obstacles.push(this.createRandomObstacle(relAngle - this.planet.angle));
+                });
+
+                let index = 0;
+                const total = this.players.size;
+                this.players.forEach((p) => {
+                    p.homeAngle = -Math.PI / 2 + ((index - (total - 1) / 2) * 0.08);
+                    p.angle = p.homeAngle;
+                    p.height = 0;
+                    p.vy = 0;
+                    p.isGrounded = true;
+                    p.isEliminated = false;
+                    p.animFrame = 0;
+                    index++;
+                });
+            }
+
+            createRandomObstacle(planetRelativeAngle) {
+                const types = ['spike', 'double_spike', 'box', 'yarn_ball', 'fish_bone', 'cat_tree', 'laser_hurdle'];
+                const selectedType = types[Math.floor(Math.random() * types.length)];
+                
+                const vibrantColors = ['#ff007f', '#00f0ff', '#39ff14', '#ff5500', '#b026ff', '#ffea00', '#f43f5e', '#a855f7'];
+                const selectedColor = vibrantColors[Math.floor(Math.random() * vibrantColors.length)];
+
+                const obstacleData = {
+                    angle: planetRelativeAngle,
+                    type: selectedType,
+                    width: 30 + Math.random() * 14,
+                    height: 42 + Math.random() * 22,
+                    color: selectedColor,
+                    secondaryColor: vibrantColors[Math.floor(Math.random() * vibrantColors.length)]
+                };
+
+                if (selectedType === 'yarn_ball') obstacleData.height = 40;
+                if (selectedType === 'fish_bone') obstacleData.height = 36;
+                if (selectedType === 'cat_tree') obstacleData.height = 62;
+
+                return obstacleData;
+            }
+
+            updatePhysics(dt) {
+                if (this.state !== 'PLAYING') return;
+
+                this.matchTime += dt;
+                this.speedTimer += dt;
+                this.spawnTimer += dt;
+
+                this.planet.purrTimer += dt * 5;
+                if (this.planet.mouthTarget > 0) {
+                    this.planet.mouthOpen += (this.planet.mouthTarget - this.planet.mouthOpen) * 8 * dt;
+                    if (Math.abs(this.planet.mouthOpen - this.planet.mouthTarget) < 0.05) {
+                        this.planet.mouthTarget = 0;
+                    }
+                } else {
+                    this.planet.mouthOpen += (0 - this.planet.mouthOpen) * 4 * dt;
+                }
+
+                this.shootingStarTimer += dt;
+                if (this.shootingStarTimer > 3.5 + Math.random() * 4) {
+                    this.shootingStarTimer = 0;
+                    this.shootingStars.push({
+                        x: Math.random() * this.canvas.width * 0.7,
+                        y: Math.random() * this.canvas.height * 0.3,
+                        vx: Math.random() * 400 + 350,
+                        vy: Math.random() * 180 + 120,
+                        length: Math.random() * 80 + 60,
+                        life: 1.0
+                    });
+                }
+
+                this.shootingStars.forEach(ss => {
+                    ss.x += ss.vx * dt;
+                    ss.y += ss.vy * dt;
+                    ss.life -= dt * 1.2;
+                });
+                this.shootingStars = this.shootingStars.filter(ss => ss.life > 0);
+
+                if (this.speedTimer >= 13.5 && !this.meowWarningPlayed) {
+                    this.meowWarningPlayed = true;
+                    this.planet.mouthTarget = 1.0;
+                    sound.playMeow();
+                    this.showToast('🐾 ¡MIAU! ¡La velocidad va a subir!');
+                }
+
+                if (this.speedTimer >= 15) {
+                    this.speedTimer = 0;
+                    this.meowWarningPlayed = false;
+                    this.planet.speedMultiplier += 0.35;
+                    this.planet.mouthTarget = 1.0;
+                    sound.setBGMTempo(sound.tempo + 18);
+                    sound.playSpeedUp();
+                    this.showSpeedBanner();
+                }
+
+                const currentPlanetSpeed = this.planet.baseSpeed * this.planet.speedMultiplier;
+                this.planet.angle += currentPlanetSpeed * dt;
+
+                if (this.spawnTimer >= this.nextSpawnInterval) {
+                    this.spawnTimer = 0;
+                    const spawnAngle = -this.planet.angle - Math.PI * 0.95;
+                    this.obstacles.push(this.createRandomObstacle(spawnAngle));
+
+                    const baseInterval = 2.2 / this.planet.speedMultiplier;
+                    const randomVariance = 0.4 + Math.random() * 1.1;
+
+                    if (Math.random() < 0.22) {
+                        this.nextSpawnInterval = Math.max(0.48, 0.7 / this.planet.speedMultiplier);
+                    } else {
+                        this.nextSpawnInterval = Math.max(0.65, baseInterval * randomVariance);
                     }
                 }
 
-                // Aplicar movimiento angular al planeta
-                this.planetAngle += this.gameSpeed * this.rotationDirection;
+                this.obstacles = this.obstacles.filter(obs => {
+                    const worldAngle = obs.angle + this.planet.angle;
+                    return worldAngle < -Math.PI * 0.05;
+                });
 
-                // Lógica de Jugadores y Bots
                 let aliveCount = 0;
-                this.players.forEach(p => {
-                    if (!p.isAlive) return;
+
+                this.players.forEach((p) => {
+                    if (p.isEliminated) return;
+
                     aliveCount++;
 
-                    // Inteligencia Artificial de Bots
-                    if (p.isBot && p.isGrounded) {
-                        this.obstacles.forEach(obs => {
-                            let diff = (obs.angle - p.angle) % (Math.PI * 2);
-                            if (diff < 0) diff += Math.PI * 2;
-                            if (diff < 0.35 && diff > 0.05) {
-                                if (Math.random() < 0.88) this.jumpPlayer(p.id);
-                            }
-                        });
+                    // Animación de carrera sincronizada con la velocidad del planeta
+                    if (p.isGrounded) {
+                        p.animFrame += dt * currentPlanetSpeed * 32;
                     }
 
-                    // Física del Salto
+                    if (p.isBot) {
+                        this.updateBotAI(p, currentPlanetSpeed);
+                    }
+
+                    if (p.input.jump && p.isGrounded) {
+                        p.vy = 520;
+                        p.isGrounded = false;
+                        p.input.jump = false;
+                        sound.playJump();
+                    }
+
                     if (!p.isGrounded) {
-                        p.yOffset += p.vy;
-                        p.vy -= 0.65;
-                        if (p.yOffset <= 0) {
-                            p.yOffset = 0;
+                        p.height += p.vy * dt;
+                        p.vy -= 1400 * dt;
+                        if (p.height <= 0) {
+                            p.height = 0;
                             p.vy = 0;
                             p.isGrounded = true;
                         }
                     }
 
-                    if (p.meowTimer > 0) p.meowTimer -= dt;
+                    let beingPushed = false;
+                    const playerWorldAngle = p.angle;
 
-                    // Colisiones con Obstáculos
-                    this.obstacles.forEach(obs => {
-                        let angleDiff = Math.abs((p.angle - obs.angle) % (Math.PI * 2));
-                        if (angleDiff > Math.PI) angleDiff = Math.PI * 2 - angleDiff;
+                    this.obstacles.forEach((obs) => {
+                        const obsWorldAngle = obs.angle + this.planet.angle;
+                        const angularDiff = Math.abs(playerWorldAngle - obsWorldAngle);
 
-                        if (angleDiff < obs.width / 2) {
-                            if (p.yOffset < obs.height) {
-                                p.isAlive = false;
-                                this.createParticles(p.angle, p.color);
-                                showBanner(`¡${p.name} ELIMINADO!`);
+                        if (angularDiff < 0.055) {
+                            if (p.height < obs.height * 0.75) {
+                                beingPushed = true;
                             }
                         }
                     });
+
+                    if (beingPushed && p.isGrounded) {
+                        p.angle += currentPlanetSpeed * dt * 1.35;
+                    } else if (p.angle > p.homeAngle) {
+                        p.angle -= 0.6 * dt;
+                        if (p.angle < p.homeAngle) p.angle = p.homeAngle;
+                    }
+
+                    const rightEdgeThreshold = p.homeAngle + 0.42;
+                    if (p.angle >= rightEdgeThreshold) {
+                        p.isEliminated = true;
+                        sound.playHit();
+                        this.showToast(`💥 ¡${p.name} fue arrastrado fuera del planeta!`);
+                    }
+
+                    if (p.meowTimer > 0) p.meowTimer -= dt;
                 });
 
-                // Actualizar Partículas
-                this.particles.forEach((pt, i) => {
-                    pt.x += pt.vx;
-                    pt.y += pt.vy;
-                    pt.alpha -= dt;
-                    if (pt.alpha <= 0) this.particles.splice(i, 1);
-                });
+                document.getElementById('hud-timer').innerText = this.formatTime(this.matchTime);
+                document.getElementById('hud-speed').innerText = this.planet.speedMultiplier.toFixed(1) + 'x';
+                document.getElementById('hud-alive-count').innerText = `${aliveCount} / ${this.players.size}`;
 
-                // HUD Status
-                document.getElementById('hud-round').innerText = this.currentRound;
-                document.getElementById('hud-alive').innerText = aliveCount;
-            }
-
-            createParticles(angle, color) {
-                const worldAngle = angle + this.planetAngle;
-                const px = this.centerX + Math.cos(worldAngle) * this.planetRadius;
-                const py = this.centerY + Math.sin(worldAngle) * this.planetRadius;
-
-                for (let i = 0; i < 20; i++) {
-                    this.particles.push({
-                        x: px,
-                        y: py,
-                        vx: (Math.random() - 0.5) * 8,
-                        vy: (Math.random() - 0.5) * 8,
-                        color: color,
-                        alpha: 1.0
-                    });
+                if (aliveCount <= 1 && this.players.size > 1) {
+                    this.triggerMatchOver();
+                } else if (aliveCount === 0 && this.players.size === 1) {
+                    this.triggerMatchOver();
                 }
             }
 
-            // --- CONTINUARÁ EN LA PARTE 2 CON EL DIBUJO EN CANVAS Y PEERJS ---
+            updateBotAI(bot, planetSpeed) {
+                let dangerNear = false;
 
-        // =========================================================
-            // DIBUJO EN CANVAS Y RENDERIZADO
-            // =========================================================
+                this.obstacles.forEach((obs) => {
+                    const obsWorldAngle = obs.angle + this.planet.angle;
+                    const diff = bot.angle - obsWorldAngle;
+
+                    if (diff < 0.08 && diff > -0.22) {
+                        dangerNear = true;
+                    }
+                });
+
+                bot.input.jump = dangerNear && bot.isGrounded;
+            }
+
+            formatTime(seconds) {
+                const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+                const s = Math.floor(seconds % 60).toString().padStart(2, '0');
+                return `${m}:${s}`;
+            }
+
+            showSpeedBanner() {
+                const banner = document.getElementById('speed-banner');
+                if (!banner) return;
+                banner.classList.remove('hidden');
+                banner.classList.remove('animate-speed-banner');
+                void banner.offsetWidth;
+                banner.classList.add('animate-speed-banner');
+                setTimeout(() => {
+                    banner.classList.add('hidden');
+                }, 2500);
+            }
+
+            triggerMatchOver() {
+                if (this.state === 'GAMEOVER') return;
+                this.state = 'GAMEOVER';
+                sound.stopBGM();
+                sound.playWin();
+
+                let winnerName = '¡Nadie!';
+                this.players.forEach(p => {
+                    if (!p.isEliminated) winnerName = p.name;
+                });
+
+                document.getElementById('winner-name-display').innerText = winnerName;
+                document.getElementById('winner-modal').classList.remove('hidden');
+            }
+
+            resetMatchToLobby() {
+                this.state = 'LOBBY';
+                sound.stopBGM();
+                document.getElementById('winner-modal').classList.add('hidden');
+                document.getElementById('game-hud').classList.add('hidden');
+                document.getElementById('lobby-modal').classList.remove('hidden');
+            }
+
             render() {
                 this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
@@ -529,515 +1149,1111 @@
                 this.drawCatPlanet();
                 this.drawObstacles();
                 this.drawPlayers();
-                this.drawParticles();
             }
 
             drawBackground() {
-                // Fondo estelar sutil con destellos
-                this.ctx.save();
-                this.ctx.fillStyle = '#080914';
-                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                const w = this.canvas.width;
+                const h = this.canvas.height;
+                const time = performance.now() * 0.001;
 
-                const time = Date.now() * 0.001;
-                this.ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-                for (let i = 0; i < 40; i++) {
-                    const x = (Math.sin(i * 99 + time * 0.2) * 0.5 + 0.5) * this.canvas.width;
-                    const y = (Math.cos(i * 33 + time * 0.2) * 0.5 + 0.5) * this.canvas.height;
-                    const size = (Math.sin(i + time * 2) * 0.5 + 0.5) * 2 + 1;
+                const skyGrad = this.ctx.createLinearGradient(0, 0, 0, h);
+                skyGrad.addColorStop(0, '#0a0d24');
+                skyGrad.addColorStop(0.4, '#12183b');
+                skyGrad.addColorStop(0.8, '#1b2354');
+                skyGrad.addColorStop(1, '#0e132c');
+                this.ctx.fillStyle = skyGrad;
+                this.ctx.fillRect(0, 0, w, h);
+
+                this.stars.forEach(s => {
+                    const sx = s.x * w;
+                    const sy = s.y * h;
+                    const twinkle = Math.sin(time * s.twinkleSpeed + s.twinkleOffset);
+                    const alpha = 0.6 + 0.4 * twinkle;
+
+                    this.ctx.save();
+                    this.ctx.globalAlpha = alpha * 0.45;
+                    this.ctx.strokeStyle = s.color;
+                    this.ctx.lineWidth = 1.8;
+                    this.ctx.setLineDash([4, 6]);
+
                     this.ctx.beginPath();
-                    this.ctx.arc(x, y, size, 0, Math.PI * 2);
+                    this.ctx.arc(sx, sy, s.haloRadius + twinkle * 3, 0, Math.PI * 2);
+                    this.ctx.stroke();
+
+                    this.ctx.beginPath();
+                    this.ctx.arc(sx, sy, s.haloRadius * 0.6, 0, Math.PI * 2);
+                    this.ctx.stroke();
+                    this.ctx.restore();
+
+                    const coreGrad = this.ctx.createRadialGradient(sx, sy, 0, sx, sy, s.radius * 2);
+                    coreGrad.addColorStop(0, '#ffffff');
+                    coreGrad.addColorStop(0.5, s.color);
+                    coreGrad.addColorStop(1, 'transparent');
+
+                    this.ctx.fillStyle = coreGrad;
+                    this.ctx.beginPath();
+                    this.ctx.arc(sx, sy, s.radius * 2.5, 0, Math.PI * 2);
                     this.ctx.fill();
+                });
+
+                this.shootingStars.forEach(ss => {
+                    this.ctx.save();
+                    this.ctx.globalAlpha = ss.life;
+                    const grad = this.ctx.createLinearGradient(ss.x, ss.y, ss.x - ss.length, ss.y - ss.length * 0.5);
+                    grad.addColorStop(0, '#ffffff');
+                    grad.addColorStop(0.3, '#fef08a');
+                    grad.addColorStop(1, 'transparent');
+
+                    this.ctx.strokeStyle = grad;
+                    this.ctx.lineWidth = 3.5;
+                    this.ctx.lineCap = 'round';
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(ss.x, ss.y);
+                    this.ctx.lineTo(ss.x - ss.length, ss.y - ss.length * 0.5);
+                    this.ctx.stroke();
+
+                    this.ctx.fillStyle = '#ffffff';
+                    this.ctx.beginPath();
+                    this.ctx.arc(ss.x, ss.y, 3, 0, Math.PI * 2);
+                    this.ctx.fill();
+                    this.ctx.restore();
+                });
+
+                const horizonY = h * 0.88;
+                this.ctx.save();
+                this.ctx.fillStyle = 'rgba(10, 15, 38, 0.7)';
+                this.ctx.fillRect(0, horizonY, w, h - horizonY);
+
+                for (let i = 0; i < 24; i++) {
+                    const rx = (i / 24) * w + Math.sin(time + i) * 15;
+                    const ry = horizonY + (i % 6) * 12 + Math.cos(time * 2 + i) * 3;
+                    const rw = 20 + Math.sin(time * 3 + i) * 15;
+
+                    this.ctx.fillStyle = i % 2 === 0 ? 'rgba(253, 224, 71, 0.25)' : 'rgba(56, 189, 248, 0.2)';
+                    this.ctx.fillRect(rx, ry, rw, 2);
                 }
                 this.ctx.restore();
             }
 
-            // REDISEÑO: OREJAS GIGANTES Y PATAS LARGAS HASTA LA ALTURA DE LAS OREJAS
             drawCatPlanet() {
-                const ctx = this.ctx;
-                const centerX = this.centerX;
-                const centerY = this.centerY;
-                const radius = this.planetRadius;
-                const time = Date.now() * 0.003;
+                const p = this.planet;
+                const time = performance.now() * 0.001;
 
-                ctx.save();
+                this.ctx.save();
+                this.ctx.translate(p.x, p.y);
 
-                // ---------------------------------------------------------
-                // 1. OREJAS GIGANTES DE GATO (SOBRESALIENTES DEL PLANETA)
-                // ---------------------------------------------------------
-                const earWidth = radius * 0.55;
-                const earHeight = radius * 0.95; // Orejas muy altas
+                p.blinkTimer += 0.016;
+                if (p.blinkTimer > 3.5) {
+                    if (p.blinkTimer > 3.68) {
+                        p.blinkTimer = 0;
+                        p.isBlinking = false;
+                    } else {
+                        p.isBlinking = true;
+                    }
+                }
 
-                // Oreja Izquierda
-                ctx.save();
-                ctx.translate(centerX - radius * 0.5, centerY - radius * 0.65);
-                ctx.rotate(-0.25);
-                ctx.fillStyle = "#2d3436";
-                ctx.beginPath();
-                ctx.moveTo(-earWidth / 2, 0);
-                ctx.lineTo(0, -earHeight);
-                ctx.lineTo(earWidth / 2, 0);
-                ctx.closePath();
-                ctx.fill();
+                const pupilOffsetX = Math.sin(time * 1.5) * 8;
+                const pupilOffsetY = Math.cos(time * 2.1) * 5;
 
-                // Interior rosa oreja izquierda
-                ctx.fillStyle = "#ff85a2";
-                ctx.beginPath();
-                ctx.moveTo(-earWidth * 0.3, -earHeight * 0.1);
-                ctx.lineTo(0, -earHeight * 0.85);
-                ctx.lineTo(earWidth * 0.3, -earHeight * 0.1);
-                ctx.closePath();
-                ctx.fill();
-                ctx.restore();
+                this.drawCatPaws();
+                this.drawCatEar(-p.radius * 0.55, -p.radius * 0.82, -0.32, '#242021', '#f2a4ad');
+                this.drawCatEar(p.radius * 0.55, -p.radius * 0.82, 0.32, '#d96e28', '#f2a4ad');
 
-                // Oreja Derecha
-                ctx.save();
-                ctx.translate(centerX + radius * 0.5, centerY - radius * 0.65);
-                ctx.rotate(0.25);
-                ctx.fillStyle = "#e67e22";
-                ctx.beginPath();
-                ctx.moveTo(-earWidth / 2, 0);
-                ctx.lineTo(0, -earHeight);
-                ctx.lineTo(earWidth / 2, 0);
-                ctx.closePath();
-                ctx.fill();
+                this.ctx.beginPath();
+                this.ctx.arc(0, 0, p.radius, 0, Math.PI * 2);
+                this.ctx.fillStyle = '#fbf7ee';
+                this.ctx.fill();
 
-                // Interior rosa oreja derecha
-                ctx.fillStyle = "#ff85a2";
-                ctx.beginPath();
-                ctx.moveTo(-earWidth * 0.3, -earHeight * 0.1);
-                ctx.lineTo(0, -earHeight * 0.85);
-                ctx.lineTo(earWidth * 0.3, -earHeight * 0.1);
-                ctx.closePath();
-                ctx.fill();
-                ctx.restore();
+                this.ctx.save();
+                this.ctx.clip();
 
-                // ---------------------------------------------------------
-                // 2. CUERPO DEL PLANETA GATO (ROTATIVO)
-                // ---------------------------------------------------------
-                ctx.save();
-                ctx.translate(centerX, centerY);
-                ctx.rotate(this.planetAngle);
+                this.ctx.fillStyle = '#242021';
+                this.ctx.beginPath();
+                this.ctx.ellipse(-p.radius * 0.65, -p.radius * 0.45, p.radius * 0.55, p.radius * 0.6, 0.4, 0, Math.PI * 2);
+                this.ctx.fill();
 
-                // Base Esférica
-                ctx.beginPath();
-                ctx.arc(0, 0, radius, 0, Math.PI * 2);
-                ctx.fillStyle = "#f5f0e6";
-                ctx.fill();
+                this.ctx.fillStyle = '#d96e28';
+                this.ctx.beginPath();
+                this.ctx.ellipse(p.radius * 0.68, -p.radius * 0.35, p.radius * 0.52, p.radius * 0.55, -0.35, 0, Math.PI * 2);
+                this.ctx.fill();
 
-                // Manchas Calicó
-                ctx.fillStyle = "#2d3436";
-                ctx.beginPath();
-                ctx.arc(-radius * 0.4, -radius * 0.3, radius * 0.45, 0, Math.PI * 2);
-                ctx.fill();
+                this.ctx.fillStyle = '#c2571a';
+                this.ctx.beginPath();
+                this.ctx.ellipse(0, -p.radius * 0.88, p.radius * 0.28, p.radius * 0.22, 0, 0, Math.PI * 2);
+                this.ctx.fill();
+                this.ctx.restore();
 
-                ctx.fillStyle = "#e67e22";
-                ctx.beginPath();
-                ctx.arc(radius * 0.45, radius * 0.2, radius * 0.5, 0, Math.PI * 2);
-                ctx.fill();
+                this.ctx.lineWidth = 5;
+                this.ctx.strokeStyle = '#1e1b18';
+                this.ctx.stroke();
 
-                ctx.restore(); // Fin de rotación del planeta base
+                const faceY = -p.radius * 0.42;
 
-                // ---------------------------------------------------------
-                // 3. CARA DEL GATO (FIJA EN FRENTE)
-                // ---------------------------------------------------------
-                // Ojos Verdes
-                ctx.fillStyle = "#2ecc71";
-                ctx.beginPath();
-                ctx.ellipse(centerX - radius * 0.25, centerY - radius * 0.15, 16, 24, 0, 0, Math.PI * 2);
-                ctx.ellipse(centerX + radius * 0.25, centerY - radius * 0.15, 16, 24, 0, 0, Math.PI * 2);
-                ctx.fill();
+                this.drawRealisticCatEye(-p.radius * 0.28, faceY, p.isBlinking, pupilOffsetX, pupilOffsetY);
+                this.drawRealisticCatEye(p.radius * 0.28, faceY, p.isBlinking, pupilOffsetX, pupilOffsetY);
 
-                // Pupilas
-                ctx.fillStyle = "#111111";
-                ctx.beginPath();
-                ctx.ellipse(centerX - radius * 0.25, centerY - radius * 0.15, 5, 18, 0, 0, Math.PI * 2);
-                ctx.ellipse(centerX + radius * 0.25, centerY - radius * 0.15, 5, 18, 0, 0, Math.PI * 2);
-                ctx.fill();
+                const noseY = faceY + 42;
+                this.ctx.fillStyle = '#e26a7a';
+                this.ctx.beginPath();
+                this.ctx.moveTo(0, noseY + 10);
+                this.ctx.lineTo(-14, noseY - 6);
+                this.ctx.lineTo(14, noseY - 6);
+                this.ctx.closePath();
+                this.ctx.fill();
+                this.ctx.lineWidth = 1.5;
+                this.ctx.strokeStyle = '#8c3541';
+                this.ctx.stroke();
 
-                // Nariz Rosa
-                ctx.fillStyle = "#e84393";
-                ctx.beginPath();
-                ctx.moveTo(centerX - 8, centerY - radius * 0.02);
-                ctx.lineTo(centerX + 8, centerY - radius * 0.02);
-                ctx.lineTo(centerX, centerY - radius * 0.02 + 10);
-                ctx.closePath();
-                ctx.fill();
+                this.ctx.fillStyle = '#8c3541';
+                this.ctx.beginPath();
+                this.ctx.arc(-5, noseY + 4, 2, 0, Math.PI * 2);
+                this.ctx.arc(5, noseY + 4, 2, 0, Math.PI * 2);
+                this.ctx.fill();
 
-                // ---------------------------------------------------------
-                // 4. PATAS LARGAS Y ANIMADAS (SUBIENDO HASTA LAS OREJAS)
-                // ---------------------------------------------------------
-                const leftPawOffsetY = Math.sin(time * 2) * 12;
-                const rightPawOffsetY = Math.sin(time * 2 + Math.PI) * 12;
-                const pawWidth = 70;
-                const pawTopY = centerY - radius * 0.65; // Altura de las orejas
-                const pawBottomY = centerY + radius * 1.05;
+                this.drawAnimatedMouth(0, noseY + 12, p.mouthOpen, Math.sin(p.purrTimer) * 1.5);
 
-                // --- PATA IZQUIERDA ---
-                ctx.save();
-                ctx.translate(centerX - radius * 0.95, pawTopY + leftPawOffsetY);
-                ctx.rotate(-0.08 + Math.cos(time * 1.5) * 0.04);
+                this.drawWhiskers(-p.radius * 0.32, noseY + 14, true);
+                this.drawWhiskers(p.radius * 0.32, noseY + 14, false);
 
-                ctx.fillStyle = "#ffffff";
-                ctx.strokeStyle = "#2d3436";
-                ctx.lineWidth = 4;
-                ctx.beginPath();
-                ctx.roundRect(-pawWidth / 2, 0, pawWidth, pawBottomY - pawTopY, [35, 35, 10, 10]);
-                ctx.fill();
-                ctx.stroke();
+                this.ctx.fillStyle = 'rgba(244, 114, 182, 0.35)';
+                this.ctx.beginPath();
+                this.ctx.ellipse(-p.radius * 0.48, noseY + 12, 22, 14, 0, 0, Math.PI * 2);
+                this.ctx.ellipse(p.radius * 0.48, noseY + 12, 22, 14, 0, 0, Math.PI * 2);
+                this.ctx.fill();
 
-                // Huellas Rosas
-                ctx.fillStyle = "#ff85a2";
-                ctx.beginPath(); ctx.ellipse(0, 40, 18, 14, 0, 0, Math.PI * 2); ctx.fill();
-                ctx.beginPath(); ctx.arc(-18, 16, 7, 0, Math.PI * 2); ctx.fill();
-                ctx.beginPath(); ctx.arc(0, 10, 7, 0, Math.PI * 2); ctx.fill();
-                ctx.beginPath(); ctx.arc(18, 16, 7, 0, Math.PI * 2); ctx.fill();
-                ctx.restore();
+                this.ctx.restore();
+            }
 
-                // --- PATA DERECHA ---
-                ctx.save();
-                ctx.translate(centerX + radius * 0.95, pawTopY + rightPawOffsetY);
-                ctx.rotate(0.08 - Math.cos(time * 1.5) * 0.04);
+            drawCatPaws() {
+                const p = this.planet;
+                const time = performance.now() * 0.001;
+                const waveLeft = Math.sin(time * 2) * 8;
+                const waveRight = Math.cos(time * 2) * 8;
 
-                ctx.fillStyle = "#ffffff";
-                ctx.strokeStyle = "#2d3436";
-                ctx.lineWidth = 4;
-                ctx.beginPath();
-                ctx.roundRect(-pawWidth / 2, 0, pawWidth, pawBottomY - pawTopY, [35, 35, 10, 10]);
-                ctx.fill();
-                ctx.stroke();
+                this.ctx.save();
+                this.ctx.translate(-p.radius * 1.08, -p.radius * 0.05 + waveLeft);
+                this.ctx.rotate(-0.25);
 
-                // Huellas Rosas
-                ctx.fillStyle = "#ff85a2";
-                ctx.beginPath(); ctx.ellipse(0, 40, 18, 14, 0, 0, Math.PI * 2); ctx.fill();
-                ctx.beginPath(); ctx.arc(-18, 16, 7, 0, Math.PI * 2); ctx.fill();
-                ctx.beginPath(); ctx.arc(0, 10, 7, 0, Math.PI * 2); ctx.fill();
-                ctx.beginPath(); ctx.arc(18, 16, 7, 0, Math.PI * 2); ctx.fill();
-                ctx.restore();
+                this.ctx.fillStyle = '#242021';
+                this.ctx.strokeStyle = '#1e1b18';
+                this.ctx.lineWidth = 5;
 
-                ctx.restore();
+                this.ctx.beginPath();
+                this.ctx.moveTo(-48, 220);
+                this.ctx.lineTo(-42, -40);
+                this.ctx.arc(-30, -70, 22, Math.PI, Math.PI * 1.5);
+                this.ctx.arc(0, -92, 24, Math.PI * 1.2, Math.PI * 1.8);
+                this.ctx.arc(32, -68, 22, Math.PI * 1.5, 0);
+                this.ctx.lineTo(48, 220);
+                this.ctx.closePath();
+                this.ctx.fill();
+                this.ctx.stroke();
+
+                this.ctx.fillStyle = '#f2a4ad';
+                this.ctx.beginPath();
+                this.ctx.ellipse(0, -25, 22, 18, 0, 0, Math.PI * 2);
+                this.ctx.fill();
+
+                this.ctx.beginPath();
+                this.ctx.arc(-28, -62, 9, 0, Math.PI * 2);
+                this.ctx.arc(0, -80, 10, 0, Math.PI * 2);
+                this.ctx.arc(28, -60, 9, 0, Math.PI * 2);
+                this.ctx.fill();
+                this.ctx.restore();
+
+                this.ctx.save();
+                this.ctx.translate(p.radius * 1.08, -p.radius * 0.05 + waveRight);
+                this.ctx.rotate(0.25);
+
+                this.ctx.fillStyle = '#d96e28';
+                this.ctx.strokeStyle = '#1e1b18';
+                this.ctx.lineWidth = 5;
+
+                this.ctx.beginPath();
+                this.ctx.moveTo(-48, 220);
+                this.ctx.lineTo(-32, -68);
+                this.ctx.arc(-28, -68, 22, Math.PI, Math.PI * 1.5);
+                this.ctx.arc(0, -92, 24, Math.PI * 1.2, Math.PI * 1.8);
+                this.ctx.arc(30, -70, 22, Math.PI * 1.5, 0);
+                this.ctx.lineTo(48, 220);
+                this.ctx.closePath();
+                this.ctx.fill();
+                this.ctx.stroke();
+
+                this.ctx.fillStyle = '#f2a4ad';
+                this.ctx.beginPath();
+                this.ctx.ellipse(0, -25, 22, 18, 0, 0, Math.PI * 2);
+                this.ctx.fill();
+
+                this.ctx.beginPath();
+                this.ctx.arc(-28, -60, 9, 0, Math.PI * 2);
+                this.ctx.arc(0, -80, 10, 0, Math.PI * 2);
+                this.ctx.arc(28, -62, 9, 0, Math.PI * 2);
+                this.ctx.fill();
+                this.ctx.restore();
+            }
+
+            drawCatEar(x, y, rotation, outerColor, innerColor) {
+                this.ctx.save();
+                this.ctx.translate(x, y);
+                this.ctx.rotate(rotation);
+
+                this.ctx.fillStyle = outerColor;
+                this.ctx.beginPath();
+                this.ctx.moveTo(0, -135);
+                this.ctx.lineTo(-60, 30);
+                this.ctx.lineTo(60, 30);
+                this.ctx.closePath();
+                this.ctx.fill();
+                this.ctx.lineWidth = 5;
+                this.ctx.strokeStyle = '#1e1b18';
+                this.ctx.stroke();
+
+                this.ctx.fillStyle = innerColor;
+                this.ctx.beginPath();
+                this.ctx.moveTo(0, -110);
+                this.ctx.lineTo(-40, 20);
+                this.ctx.lineTo(40, 20);
+                this.ctx.closePath();
+                this.ctx.fill();
+
+                this.ctx.strokeStyle = '#ffffff';
+                this.ctx.lineWidth = 2.5;
+                this.ctx.beginPath();
+                this.ctx.moveTo(-20, 15);
+                this.ctx.lineTo(-8, -28);
+                this.ctx.moveTo(0, 18);
+                this.ctx.lineTo(6, -35);
+                this.ctx.moveTo(20, 15);
+                this.ctx.lineTo(16, -22);
+                this.ctx.stroke();
+
+                this.ctx.restore();
+            }
+
+            drawRealisticCatEye(x, y, isBlinking, pupilX, pupilY) {
+                this.ctx.save();
+                this.ctx.translate(x, y);
+
+                if (isBlinking) {
+                    this.ctx.lineWidth = 6;
+                    this.ctx.strokeStyle = '#1e1b18';
+                    this.ctx.lineCap = 'round';
+                    this.ctx.beginPath();
+                    this.ctx.arc(0, 0, 38, 0.2 * Math.PI, 0.8 * Math.PI);
+                    this.ctx.stroke();
+                } else {
+                    this.ctx.beginPath();
+                    this.ctx.ellipse(0, 0, 42, 54, 0, 0, Math.PI * 2);
+                    this.ctx.fillStyle = '#1e1b18';
+                    this.ctx.fill();
+
+                    const irisGrad = this.ctx.createRadialGradient(0, 0, 5, 0, 0, 42);
+                    irisGrad.addColorStop(0, '#facc15');
+                    irisGrad.addColorStop(0.5, '#84cc16');
+                    irisGrad.addColorStop(0.95, '#3f6212');
+                    irisGrad.addColorStop(1, '#1e1b18');
+
+                    this.ctx.beginPath();
+                    this.ctx.ellipse(0, 0, 39, 51, 0, 0, Math.PI * 2);
+                    this.ctx.fillStyle = irisGrad;
+                    this.ctx.fill();
+
+                    this.ctx.fillStyle = '#0f172a';
+                    this.ctx.beginPath();
+                    this.ctx.ellipse(pupilX, pupilY, 12, 42, 0, 0, Math.PI * 2);
+                    this.ctx.fill();
+
+                    this.ctx.fillStyle = '#ffffff';
+                    this.ctx.beginPath();
+                    this.ctx.arc(-12 + pupilX, -18 + pupilY, 11, 0, Math.PI * 2);
+                    this.ctx.fill();
+
+                    this.ctx.beginPath();
+                    this.ctx.arc(12 + pupilX, 16 + pupilY, 6, 0, Math.PI * 2);
+                    this.ctx.fill();
+                }
+
+                this.ctx.restore();
+            }
+
+            drawAnimatedMouth(x, y, mouthOpenFactor, purrOffset) {
+                this.ctx.save();
+                this.ctx.translate(x, y + purrOffset);
+
+                this.ctx.lineWidth = 3.5;
+                this.ctx.strokeStyle = '#1e1b18';
+
+                if (mouthOpenFactor > 0.1) {
+                    const mouthHeight = 18 * mouthOpenFactor;
+
+                    this.ctx.fillStyle = '#5c1d24';
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(-16, 0);
+                    this.ctx.quadraticCurveTo(0, mouthHeight * 1.8, 16, 0);
+                    this.ctx.quadraticCurveTo(0, -4, -16, 0);
+                    this.ctx.closePath();
+                    this.ctx.fill();
+                    this.ctx.stroke();
+
+                    this.ctx.fillStyle = '#f472b6';
+                    this.ctx.beginPath();
+                    this.ctx.ellipse(0, mouthHeight * 0.8, 10, 7 * mouthOpenFactor, 0, 0, Math.PI * 2);
+                    this.ctx.fill();
+                } else {
+                    this.ctx.beginPath();
+                    this.ctx.arc(-12, 0, 12, 0.15 * Math.PI, 0.85 * Math.PI);
+                    this.ctx.arc(12, 0, 12, 0.15 * Math.PI, 0.85 * Math.PI);
+                    this.ctx.stroke();
+                }
+
+                this.ctx.restore();
+            }
+
+            drawWhiskers(x, y, isLeft) {
+                this.ctx.lineWidth = 2.5;
+                this.ctx.strokeStyle = '#ffffff';
+                const dir = isLeft ? -1 : 1;
+
+                for (let i = -1; i <= 1; i++) {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(x, y + i * 5);
+                    this.ctx.lineTo(x + dir * 65, y + i * 16 - 8);
+                    this.ctx.stroke();
+                }
             }
 
             drawObstacles() {
-                const ctx = this.ctx;
-                this.obstacles.forEach(obs => {
-                    const worldAngle = obs.angle + this.planetAngle;
-                    const x = this.centerX + Math.cos(worldAngle) * this.planetRadius;
-                    const y = this.centerY + Math.sin(worldAngle) * this.planetRadius;
+                const p = this.planet;
+                const time = performance.now() * 0.001;
 
-                    ctx.save();
-                    ctx.translate(x, y);
-                    ctx.rotate(worldAngle + Math.PI / 2);
+                this.obstacles.forEach((obs) => {
+                    const angle = obs.angle + p.angle;
+                    const x = p.x + p.radius * Math.cos(angle);
+                    const y = p.y + p.radius * Math.sin(angle);
+
+                    this.ctx.save();
+                    this.ctx.translate(x, y);
+                    this.ctx.rotate(angle + Math.PI / 2);
+
+                    const w = obs.width;
+                    const h = obs.height;
+                    const primaryColor = obs.color || '#ff007f';
+                    const secondaryColor = obs.secondaryColor || '#00f0ff';
+
+                    this.ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+                    this.ctx.beginPath();
+                    this.ctx.ellipse(0, 2, w * 0.6, 6, 0, 0, Math.PI * 2);
+                    this.ctx.fill();
 
                     if (obs.type === 'spike') {
-                        ctx.fillStyle = '#e74c3c';
-                        ctx.beginPath();
-                        ctx.moveTo(-12, 0);
-                        ctx.lineTo(0, -35);
-                        ctx.lineTo(12, 0);
-                        ctx.closePath();
-                        ctx.fill();
-                    } else if (obs.type === 'crate') {
-                        ctx.fillStyle = '#d35400';
-                        ctx.fillRect(-15, -30, 30, 30);
-                        ctx.strokeStyle = '#f39c12';
-                        ctx.lineWidth = 2;
-                        ctx.strokeRect(-15, -30, 30, 30);
-                    } else if (obs.type === 'yarn') {
-                        ctx.fillStyle = '#9b59b6';
-                        ctx.beginPath();
-                        ctx.arc(0, -18, 18, 0, Math.PI * 2);
-                        ctx.fill();
-                    } else if (obs.type === 'laser') {
-                        ctx.strokeStyle = '#00d2d3';
-                        ctx.lineWidth = 4;
-                        ctx.beginPath();
-                        ctx.moveTo(0, 0);
-                        ctx.lineTo(0, -60);
-                        ctx.stroke();
+                        const gradLeft = this.ctx.createLinearGradient(-w / 2, 0, 0, -h);
+                        gradLeft.addColorStop(0, primaryColor);
+                        gradLeft.addColorStop(1, '#ffffff');
+
+                        const gradRight = this.ctx.createLinearGradient(w / 2, 0, 0, -h);
+                        gradRight.addColorStop(0, primaryColor);
+                        gradRight.addColorStop(1, '#0f172a');
+
+                        this.ctx.fillStyle = gradLeft;
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(0, -h);
+                        this.ctx.lineTo(-w / 2, 0);
+                        this.ctx.lineTo(0, -h * 0.15);
+                        this.ctx.closePath();
+                        this.ctx.fill();
+
+                        this.ctx.fillStyle = gradRight;
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(0, -h);
+                        this.ctx.lineTo(w / 2, 0);
+                        this.ctx.lineTo(0, -h * 0.15);
+                        this.ctx.closePath();
+                        this.ctx.fill();
+
+                        this.ctx.strokeStyle = '#ffffff';
+                        this.ctx.lineWidth = 2;
+                        this.ctx.stroke();
+
+                        const flareSize = 4 + Math.sin(time * 8) * 3;
+                        this.ctx.fillStyle = '#ffffff';
+                        this.ctx.beginPath();
+                        this.ctx.arc(0, -h, flareSize, 0, Math.PI * 2);
+                        this.ctx.fill();
+
+                    } else if (obs.type === 'double_spike') {
+                        const drawSingleCrystal = (cx, cy, cw, ch, col) => {
+                            this.ctx.save();
+                            this.ctx.translate(cx, cy);
+
+                            const gL = this.ctx.createLinearGradient(-cw / 2, 0, 0, -ch);
+                            gL.addColorStop(0, col);
+                            gL.addColorStop(1, '#ffffff');
+
+                            const gR = this.ctx.createLinearGradient(cw / 2, 0, 0, -ch);
+                            gR.addColorStop(0, col);
+                            gR.addColorStop(1, '#1e1b18');
+
+                            this.ctx.fillStyle = gL;
+                            this.ctx.beginPath();
+                            this.ctx.moveTo(0, -ch);
+                            this.ctx.lineTo(-cw / 2, 0);
+                            this.ctx.lineTo(0, -ch * 0.2);
+                            this.ctx.closePath();
+                            this.ctx.fill();
+
+                            this.ctx.fillStyle = gR;
+                            this.ctx.beginPath();
+                            this.ctx.moveTo(0, -ch);
+                            this.ctx.lineTo(cw / 2, 0);
+                            this.ctx.lineTo(0, -ch * 0.2);
+                            this.ctx.closePath();
+                            this.ctx.fill();
+
+                            this.ctx.strokeStyle = '#ffffff';
+                            this.ctx.lineWidth = 1.5;
+                            this.ctx.stroke();
+                            this.ctx.restore();
+                        };
+
+                        drawSingleCrystal(-w * 0.28, 0, w * 0.55, h, primaryColor);
+                        drawSingleCrystal(w * 0.28, 0, w * 0.5, h * 0.85, secondaryColor);
+
+                        this.ctx.strokeStyle = '#5eead4';
+                        this.ctx.lineWidth = 2;
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(-w * 0.28, -h);
+                        const midX = (Math.random() - 0.5) * 8;
+                        const midY = -h * 0.9;
+                        this.ctx.lineTo(midX, midY);
+                        this.ctx.lineTo(w * 0.28, -h * 0.85);
+                        this.ctx.stroke();
+
+                    } else if (obs.type === 'box') {
+                        const bw = w + 8;
+                        const bh = h;
+
+                        const boxGrad = this.ctx.createLinearGradient(-bw / 2, -bh, bw / 2, 0);
+                        boxGrad.addColorStop(0, '#d97706');
+                        boxGrad.addColorStop(0.5, '#b45309');
+                        boxGrad.addColorStop(1, '#78350f');
+
+                        this.ctx.fillStyle = boxGrad;
+                        this.ctx.fillRect(-bw / 2, -bh + 12, bw, bh - 12);
+                        this.ctx.strokeStyle = '#451a03';
+                        this.ctx.lineWidth = 2.5;
+                        this.ctx.strokeRect(-bw / 2, -bh + 12, bw, bh - 12);
+
+                        this.ctx.fillStyle = '#b45309';
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(-bw / 2, -bh + 12);
+                        this.ctx.lineTo(-bw / 2 - 8, -bh - 4);
+                        this.ctx.lineTo(-2, -bh + 12);
+                        this.ctx.closePath();
+                        this.ctx.fill();
+                        this.ctx.stroke();
+
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(bw / 2, -bh + 12);
+                        this.ctx.lineTo(bw / 2 + 8, -bh - 4);
+                        this.ctx.lineTo(2, -bh + 12);
+                        this.ctx.closePath();
+                        this.ctx.fill();
+                        this.ctx.stroke();
+
+                        this.ctx.fillStyle = '#0f172a';
+                        this.ctx.fillRect(-bw / 2 + 4, -bh + 12, bw - 8, 14);
+
+                        const blink = Math.sin(time * 4) > 0.88;
+                        if (!blink) {
+                            this.ctx.fillStyle = '#facc15';
+                            this.ctx.beginPath();
+                            this.ctx.ellipse(-6, -bh + 19, 3, 4, 0, 0, Math.PI * 2);
+                            this.ctx.ellipse(6, -bh + 19, 3, 4, 0, 0, Math.PI * 2);
+                            this.ctx.fill();
+
+                            this.ctx.fillStyle = '#000000';
+                            this.ctx.beginPath();
+                            this.ctx.arc(-6, -bh + 19, 1.2, 0, Math.PI * 2);
+                            this.ctx.arc(6, -bh + 19, 1.2, 0, Math.PI * 2);
+                            this.ctx.fill();
+                        }
+
+                        this.ctx.fillStyle = '#fef08a';
+                        this.ctx.fillRect(-8, -bh + 30, 16, bh - 32);
+                        this.ctx.fillStyle = '#78350f';
+                        this.ctx.font = 'bold 9px sans-serif';
+                        this.ctx.textAlign = 'center';
+                        this.ctx.fillText('🐾', 0, -bh + 42);
+
+                    } else if (obs.type === 'yarn_ball') {
+                        const radius = h * 0.48;
+                        const centerY = -radius;
+
+                        const yarnGrad = this.ctx.createRadialGradient(-radius * 0.3, centerY - radius * 0.3, radius * 0.1, 0, centerY, radius);
+                        yarnGrad.addColorStop(0, '#ffffff');
+                        yarnGrad.addColorStop(0.3, primaryColor);
+                        yarnGrad.addColorStop(1, '#1e1b18');
+
+                        this.ctx.fillStyle = yarnGrad;
+                        this.ctx.beginPath();
+                        this.ctx.arc(0, centerY, radius, 0, Math.PI * 2);
+                        this.ctx.fill();
+
+                        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+                        this.ctx.lineWidth = 2.5;
+
+                        for (let i = -2; i <= 2; i++) {
+                            this.ctx.beginPath();
+                            this.ctx.arc(0, centerY, radius * 0.85, (i * 0.3) - 0.5, (i * 0.3) + 1.2);
+                            this.ctx.stroke();
+                        }
+
+                        const wave = Math.sin(time * 6) * 12;
+                        this.ctx.strokeStyle = primaryColor;
+                        this.ctx.lineWidth = 3.5;
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(radius * 0.6, centerY + radius * 0.4);
+                        this.ctx.quadraticCurveTo(radius * 1.3, centerY + radius * 0.8 + wave, radius * 1.8, centerY + radius * 0.2);
+                        this.ctx.stroke();
+
+                    } else if (obs.type === 'fish_bone') {
+                        const bh = h;
+
+                        this.ctx.save();
+                        this.ctx.shadowColor = secondaryColor;
+                        this.ctx.shadowBlur = 10;
+
+                        this.ctx.fillStyle = '#f8fafc';
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(0, -bh);
+                        this.ctx.lineTo(-15, -bh + 18);
+                        this.ctx.lineTo(0, -bh + 22);
+                        this.ctx.lineTo(15, -bh + 18);
+                        this.ctx.closePath();
+                        this.ctx.fill();
+
+                        this.ctx.strokeStyle = '#0f172a';
+                        this.ctx.lineWidth = 2;
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(-7, -bh + 10); this.ctx.lineTo(-3, -bh + 14);
+                        this.ctx.moveTo(-3, -bh + 10); this.ctx.lineTo(-7, -bh + 14);
+                        this.ctx.stroke();
+
+                        this.ctx.strokeStyle = '#f8fafc';
+                        this.ctx.lineWidth = 4;
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(0, -bh + 22);
+                        this.ctx.lineTo(0, -4);
+                        this.ctx.stroke();
+
+                        this.ctx.lineWidth = 3;
+                        const ribY = [-bh + 28, -bh + 38, -bh + 48];
+                        const ribW = [16, 12, 8];
+
+                        ribY.forEach((yPos, idx) => {
+                            const rw = ribW[idx];
+                            this.ctx.beginPath();
+                            this.ctx.moveTo(-rw, yPos - 3);
+                            this.ctx.lineTo(0, yPos);
+                            this.ctx.lineTo(rw, yPos - 3);
+                            this.ctx.stroke();
+                        });
+
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(0, -4);
+                        this.ctx.lineTo(-12, 2);
+                        this.ctx.lineTo(0, -2);
+                        this.ctx.lineTo(12, 2);
+                        this.ctx.closePath();
+                        this.ctx.fill();
+
+                        this.ctx.restore();
+
+                    } else if (obs.type === 'cat_tree') {
+                        const th = h;
+
+                        const postGrad = this.ctx.createLinearGradient(-8, 0, 8, 0);
+                        postGrad.addColorStop(0, '#78350f');
+                        postGrad.addColorStop(0.5, '#d97706');
+                        postGrad.addColorStop(1, '#451a03');
+
+                        this.ctx.fillStyle = postGrad;
+                        this.ctx.fillRect(-7, -th, 14, th);
+
+                        this.ctx.strokeStyle = '#451a03';
+                        this.ctx.lineWidth = 1.5;
+                        for (let yPos = -th + 4; yPos < 0; yPos += 5) {
+                            this.ctx.beginPath();
+                            this.ctx.moveTo(-7, yPos);
+                            this.ctx.lineTo(7, yPos + 2);
+                            this.ctx.stroke();
+                        }
+
+                        const platW = w + 6;
+                        this.ctx.fillStyle = primaryColor;
+                        if (this.ctx.roundRect) {
+                            this.ctx.beginPath();
+                            this.ctx.roundRect(-platW / 2, -th, platW, 12, 4);
+                            this.ctx.fill();
+                        } else {
+                            this.ctx.fillRect(-platW / 2, -th, platW, 12);
+                        }
+                        this.ctx.strokeStyle = '#ffffff';
+                        this.ctx.lineWidth = 2;
+                        this.ctx.stroke();
+
+                        const swing = Math.sin(time * 5) * 10;
+                        this.ctx.strokeStyle = '#ffffff';
+                        this.ctx.lineWidth = 1.5;
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(-platW / 3, -th + 12);
+                        this.ctx.lineTo(-platW / 3 + swing, -th + 26);
+                        this.ctx.stroke();
+
+                        this.ctx.fillStyle = secondaryColor;
+                        this.ctx.beginPath();
+                        this.ctx.arc(-platW / 3 + swing, -th + 29, 5, 0, Math.PI * 2);
+                        this.ctx.fill();
+
+                    } else if (obs.type === 'laser_hurdle') {
+                        const lw = w;
+                        const lh = h;
+
+                        const drawPylon = (px) => {
+                            const pylonGrad = this.ctx.createLinearGradient(px - 5, -lh, px + 5, 0);
+                            pylonGrad.addColorStop(0, '#475569');
+                            pylonGrad.addColorStop(0.5, '#94a3b8');
+                            pylonGrad.addColorStop(1, '#0f172a');
+
+                            this.ctx.fillStyle = pylonGrad;
+                            this.ctx.fillRect(px - 5, -lh, 10, lh);
+                            this.ctx.strokeStyle = '#38bdf8';
+                            this.ctx.lineWidth = 1.5;
+                            this.ctx.strokeRect(px - 5, -lh, 10, lh);
+
+                            this.ctx.fillStyle = Math.sin(time * 10) > 0 ? '#ef4444' : '#22c55e';
+                            this.ctx.beginPath();
+                            this.ctx.arc(px, -lh - 3, 3, 0, Math.PI * 2);
+                            this.ctx.fill();
+                        };
+
+                        drawPylon(-lw / 2);
+                        drawPylon(lw / 2);
+
+                        this.ctx.save();
+                        this.ctx.shadowColor = '#f43f5e';
+                        this.ctx.shadowBlur = 15;
+
+                        this.ctx.fillStyle = '#f43f5e';
+                        this.ctx.fillRect(-lw / 2 + 5, -lh + 6, lw - 10, 8);
+
+                        this.ctx.fillStyle = '#ffffff';
+                        this.ctx.fillRect(-lw / 2 + 5, -lh + 9, lw - 10, 2);
+
+                        const sparkX = -lw / 2 + 5 + ((time * 120) % (lw - 10));
+                        this.ctx.fillStyle = '#fef08a';
+                        this.ctx.beginPath();
+                        this.ctx.arc(sparkX, -lh + 10, 4, 0, Math.PI * 2);
+                        this.ctx.fill();
+
+                        this.ctx.restore();
                     }
-                    ctx.restore();
+
+                    this.ctx.restore();
                 });
             }
 
             drawPlayers() {
-                const ctx = this.ctx;
-                this.players.forEach(p => {
-                    if (!p.isAlive) return;
+                const p = this.planet;
 
-                    const worldAngle = p.angle + this.planetAngle;
-                    const dist = this.planetRadius + p.yOffset;
-                    const x = this.centerX + Math.cos(worldAngle) * dist;
-                    const y = this.centerY + Math.sin(worldAngle) * dist;
+                this.players.forEach((player) => {
+                    if (player.isEliminated) return;
 
-                    ctx.save();
-                    ctx.translate(x, y);
-                    ctx.rotate(worldAngle + Math.PI / 2);
+                    const angle = player.angle;
+                    const dist = p.radius + player.height;
+                    const x = p.x + dist * Math.cos(angle);
+                    const y = p.y + dist * Math.sin(angle);
 
-                    // Avatar del Gato Jugador
-                    ctx.fillStyle = p.color;
-                    ctx.beginPath();
-                    ctx.arc(0, -16, 16, 0, Math.PI * 2);
-                    ctx.fill();
+                    this.ctx.save();
+                    this.ctx.translate(x, y);
+                    this.ctx.rotate(angle + Math.PI / 2);
 
-                    // Orejas pequeñas del jugador
-                    ctx.fillStyle = p.color;
-                    ctx.beginPath(); ctx.moveTo(-12, -26); ctx.lineTo(-4, -38); ctx.lineTo(0, -26); ctx.fill();
-                    ctx.beginPath(); ctx.moveTo(12, -26); ctx.lineTo(4, -38); ctx.lineTo(0, -26); ctx.fill();
+                    this.drawStickman(player);
+                    this.drawNameplate(player);
 
-                    // Nombre
-                    ctx.fillStyle = '#ffffff';
-                    ctx.font = 'bold 11px sans-serif';
-                    ctx.textAlign = 'center';
-                    ctx.fillText(p.name, 0, -42);
+                    this.ctx.restore();
+                });
+            }
 
-                    // Bocadillo de Maullido
-                    if (p.meowTimer > 0) {
-                        ctx.fillStyle = '#ffffff';
-                        ctx.beginPath();
-                        ctx.roundRect(-25, -68, 50, 20, 8);
-                        ctx.fill();
-                        ctx.fillStyle = '#111111';
-                        ctx.font = 'bold 10px sans-serif';
-                        ctx.fillText('¡MIAU! 🐾', 0, -54);
+            // ANIMACIONES DE PERSONAJE FLUIDAS Y MEJORADAS
+            drawStickman(player) {
+                const scale = 1.35;
+                const runCycle = player.animFrame || 0;
+                const isJumping = !player.isGrounded;
+
+                this.ctx.strokeStyle = player.color;
+                this.ctx.lineWidth = 4.5;
+                this.ctx.lineCap = 'round';
+                this.ctx.lineJoin = 'round';
+
+                // Rebote vertical al correr
+                const bob = isJumping ? 0 : Math.abs(Math.sin(runCycle * 2)) * 3.5 * scale;
+
+                const headY = (-42 * scale) + bob;
+                const neckY = (-33 * scale) + bob;
+                const pelvisY = (-15 * scale) + bob;
+
+                // Cabeza
+                this.ctx.beginPath();
+                this.ctx.arc(0, headY, 9 * scale, 0, Math.PI * 2);
+                this.ctx.fillStyle = '#ffffff';
+                this.ctx.fill();
+                this.ctx.stroke();
+
+                // Orejitas de gato en el monigote
+                this.ctx.fillStyle = player.color;
+                this.ctx.beginPath();
+                this.ctx.moveTo(-6 * scale, headY - 6 * scale);
+                this.ctx.lineTo(-12 * scale, headY - 15 * scale);
+                this.ctx.lineTo(-2 * scale, headY - 8 * scale);
+                this.ctx.closePath();
+                this.ctx.fill();
+
+                this.ctx.beginPath();
+                this.ctx.moveTo(6 * scale, headY - 6 * scale);
+                this.ctx.lineTo(12 * scale, headY - 15 * scale);
+                this.ctx.lineTo(2 * scale, headY - 8 * scale);
+                this.ctx.closePath();
+                this.ctx.fill();
+
+                // Torso / Columna
+                this.ctx.beginPath();
+                this.ctx.moveTo(0, neckY);
+                this.ctx.lineTo(0, pelvisY);
+                this.ctx.stroke();
+
+                if (isJumping) {
+                    // Pose de salto / caída
+                    const ascending = player.vy > 0;
+
+                    // Brazos levantados en el aire
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(0, neckY + 4 * scale);
+                    this.ctx.lineTo(-13 * scale, neckY - 12 * scale);
+                    this.ctx.moveTo(0, neckY + 4 * scale);
+                    this.ctx.lineTo(13 * scale, neckY - 12 * scale);
+                    this.ctx.stroke();
+
+                    // Piernas flexionadas al ascender vs extendidas al caer
+                    this.ctx.beginPath();
+                    if (ascending) {
+                        this.ctx.moveTo(0, pelvisY);
+                        this.ctx.lineTo(-10 * scale, pelvisY + 8 * scale);
+                        this.ctx.lineTo(-6 * scale, pelvisY + 18 * scale);
+
+                        this.ctx.moveTo(0, pelvisY);
+                        this.ctx.lineTo(10 * scale, pelvisY + 8 * scale);
+                        this.ctx.lineTo(6 * scale, pelvisY + 18 * scale);
+                    } else {
+                        this.ctx.moveTo(0, pelvisY);
+                        this.ctx.lineTo(-12 * scale, pelvisY + 12 * scale);
+                        this.ctx.lineTo(-14 * scale, pelvisY + 22 * scale);
+
+                        this.ctx.moveTo(0, pelvisY);
+                        this.ctx.lineTo(12 * scale, pelvisY + 12 * scale);
+                        this.ctx.lineTo(14 * scale, pelvisY + 22 * scale);
                     }
+                    this.ctx.stroke();
 
-                    ctx.restore();
-                });
+                } else {
+                    // Animación fluida de piernas y brazos al correr
+                    const legAngle1 = Math.sin(runCycle) * 0.65;
+                    const legAngle2 = -Math.sin(runCycle) * 0.65;
+
+                    const armAngle1 = -Math.sin(runCycle) * 0.55;
+                    const armAngle2 = Math.sin(runCycle) * 0.55;
+
+                    const shoulderY = neckY + 4 * scale;
+                    const armLen = 12 * scale;
+                    const legLen = 15 * scale;
+
+                    // Brazos oscilantes
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(0, shoulderY);
+                    this.ctx.lineTo(Math.sin(armAngle1) * armLen, shoulderY + Math.cos(armAngle1) * armLen);
+
+                    this.ctx.moveTo(0, shoulderY);
+                    this.ctx.lineTo(Math.sin(armAngle2) * armLen, shoulderY + Math.cos(armAngle2) * armLen);
+                    this.ctx.stroke();
+
+                    // Piernas corriendo
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(0, pelvisY);
+                    this.ctx.lineTo(Math.sin(legAngle1) * legLen, pelvisY + Math.cos(legAngle1) * legLen);
+
+                    this.ctx.moveTo(0, pelvisY);
+                    this.ctx.lineTo(Math.sin(legAngle2) * legLen, pelvisY + Math.cos(legAngle2) * legLen);
+                    this.ctx.stroke();
+                }
+
+                // Bocadillo de maullido "MEOW!"
+                if (player.meowTimer > 0) {
+                    this.ctx.fillStyle = '#ffffff';
+                    this.ctx.strokeStyle = '#000000';
+                    this.ctx.lineWidth = 1.5;
+                    this.ctx.beginPath();
+                    if (this.ctx.roundRect) {
+                        this.ctx.roundRect(-28 * scale, -76 * scale + bob, 56 * scale, 24 * scale, 6);
+                    } else {
+                        this.ctx.rect(-28 * scale, -76 * scale + bob, 56 * scale, 24 * scale);
+                    }
+                    this.ctx.fill();
+                    this.ctx.stroke();
+
+                    this.ctx.fillStyle = '#e11d48';
+                    this.ctx.font = 'bold 13px sans-serif';
+                    this.ctx.textAlign = 'center';
+                    this.ctx.fillText('🐾 MEOW!', 0, -60 * scale + bob);
+                }
             }
 
-            drawParticles() {
-                const ctx = this.ctx;
-                this.particles.forEach(pt => {
-                    ctx.save();
-                    ctx.globalAlpha = pt.alpha;
-                    ctx.fillStyle = pt.color;
-                    ctx.beginPath();
-                    ctx.arc(pt.x, pt.y, 4, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.restore();
-                });
+            drawNameplate(player) {
+                this.ctx.font = 'bold 15px sans-serif';
+                const textWidth = this.ctx.measureText(player.name).width;
+
+                const plateY = -92;
+                const plateWidth = textWidth + 18;
+                const plateHeight = 22;
+
+                this.ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+                this.ctx.fillRect(-plateWidth / 2, plateY - plateHeight + 4, plateWidth, plateHeight);
+                this.ctx.strokeStyle = player.color;
+                this.ctx.lineWidth = 1.5;
+                this.ctx.strokeRect(-plateWidth / 2, plateY - plateHeight + 4, plateWidth, plateHeight);
+
+                this.ctx.fillStyle = player.color;
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText(player.name, 0, plateY - 2);
             }
 
-            loop(timestamp) {
-                const dt = Math.min((timestamp - this.lastTime) / 1000, 0.1);
-                this.lastTime = timestamp;
+            loop(now) {
+                const dt = Math.min((now - this.lastFrameTime) / 1000, 0.1);
+                this.lastFrameTime = now;
 
-                this.update(dt);
+                this.updatePhysics(dt);
                 this.render();
 
-                if (this.isRunning) {
-                    requestAnimationFrame((t) => this.loop(t));
+                requestAnimationFrame((timestamp) => this.loop(timestamp));
+            }
+        }
+
+        class MobileController {
+            constructor() {
+                this.peer = null;
+                this.conn = null;
+                this.bc = null;
+                this.clientId = 'client-' + Math.random().toString(36).substring(2, 7);
+                this.roomId = null;
+                this.player = {
+                    name: 'Gato' + Math.floor(Math.random() * 900 + 100),
+                    color: PLAYER_COLORS[0].hex
+                };
+                this.inputState = { jump: false, meow: false };
+                this.pingTimer = null;
+            }
+
+            init(roomId) {
+                this.roomId = roomId;
+
+                document.getElementById('host-view').classList.add('hidden');
+                document.getElementById('controller-view').classList.remove('hidden');
+
+                this.renderColorPicker();
+                this.initBroadcastChannel();
+
+                try {
+                    this.peer = new Peer({ debug: 1 });
+
+                    this.peer.on('open', () => {
+                        this.connectToHost();
+                    });
+
+                    this.peer.on('error', (err) => {
+                        document.getElementById('controller-state-msg').innerText = '🟡 Usando Modo Canal Local';
+                        this.sendBroadcastJoin();
+                    });
+                } catch (e) {
+                    document.getElementById('controller-state-msg').innerText = '🟡 Usando Modo Canal Local';
+                    this.sendBroadcastJoin();
+                }
+
+                this.bindTouchEvents();
+            }
+
+            initBroadcastChannel() {
+                try {
+                    this.bc = new BroadcastChannel('gato-planet-' + this.roomId);
+                    this.bc.onmessage = (event) => {
+                        const { targetId, data } = event.data || {};
+                        if (targetId && targetId !== this.clientId) return;
+
+                        if (data && data.type === 'WELCOME') {
+                            document.getElementById('controller-player-name').innerText = this.player.name;
+                            document.getElementById('controller-state-msg').innerText = '✅ ¡Conectado por Canal Local!';
+                        } else if (data && data.type === 'KICKED') {
+                            document.getElementById('controller-state-msg').innerText = '⚠️ Has sido expulsado de la sala.';
+                        }
+                    };
+                } catch (e) {
+                    console.warn('BroadcastChannel error:', e);
+                }
+            }
+
+            sendBroadcastJoin() {
+                if (this.bc) {
+                    this.bc.postMessage({
+                        senderId: this.clientId,
+                        data: {
+                            type: 'CLIENT_JOIN',
+                            player: { name: this.player.name, color: this.player.color }
+                        }
+                    });
+                }
+            }
+
+            connectToHost() {
+                document.getElementById('controller-state-msg').innerText = '🔄 Conectando a la sala ' + this.roomId + '...';
+                this.conn = this.peer.connect(this.roomId);
+
+                this.conn.on('open', () => {
+                    document.getElementById('controller-state-msg').innerText = '✅ ¡Conectado P2P! Listo para jugar.';
+                    this.conn.send({
+                        type: 'UPDATE_PROFILE',
+                        name: this.player.name,
+                        color: this.player.color
+                    });
+
+                    this.pingTimer = setInterval(() => {
+                        if (this.conn && this.conn.open) {
+                            this.conn.send({ type: 'PING' });
+                        }
+                    }, 2000);
+                });
+
+                this.conn.on('data', (data) => {
+                    if (data.type === 'WELCOME') {
+                        document.getElementById('controller-player-name').innerText = this.player.name;
+                    } else if (data.type === 'KICKED') {
+                        document.getElementById('controller-state-msg').innerText = '⚠️ Has sido expulsado de la sala.';
+                    } else if (data.type === 'PING') {
+                        this.conn.send({ type: 'PONG' });
+                    }
+                });
+
+                this.conn.on('close', () => {
+                    document.getElementById('controller-state-msg').innerText = '🔌 Conexión P2P cerrada por el Host.';
+                });
+            }
+
+            renderColorPicker() {
+                const picker = document.getElementById('controller-color-picker');
+                picker.innerHTML = '';
+                PLAYER_COLORS.forEach((col) => {
+                    const btn = document.createElement('button');
+                    btn.className = 'w-7 h-7 rounded-full border-2 border-slate-700 transition transform active:scale-95';
+                    btn.style.backgroundColor = col.hex;
+                    btn.onclick = () => {
+                        this.player.color = col.hex;
+                        document.getElementById('controller-color-indicator').style.backgroundColor = col.hex;
+                        this.sendProfileUpdate();
+                    };
+                    picker.appendChild(btn);
+                });
+                document.getElementById('controller-color-indicator').style.backgroundColor = this.player.color;
+            }
+
+            updateName() {
+                const input = document.getElementById('controller-name-input');
+                if (input.value.trim()) {
+                    this.player.name = input.value.trim();
+                    document.getElementById('controller-player-name').innerText = this.player.name;
+                    this.sendProfileUpdate();
+                }
+            }
+
+            sendProfileUpdate() {
+                const payload = {
+                    type: 'UPDATE_PROFILE',
+                    name: this.player.name,
+                    color: this.player.color
+                };
+                if (this.conn && this.conn.open) {
+                    this.conn.send(payload);
+                }
+                if (this.bc) {
+                    this.bc.postMessage({ senderId: this.clientId, data: payload });
+                }
+            }
+
+            bindTouchEvents() {
+                const setupButton = (id, key) => {
+                    const btn = document.getElementById(id);
+                    if (!btn) return;
+
+                    const handleDown = (e) => {
+                        e.preventDefault();
+                        this.inputState[key] = true;
+                        if (navigator.vibrate) navigator.vibrate(15);
+                        this.sendInput();
+                    };
+                    const handleUp = (e) => {
+                        e.preventDefault();
+                        this.inputState[key] = false;
+                        this.sendInput();
+                    };
+
+                    btn.addEventListener('touchstart', handleDown);
+                    btn.addEventListener('touchend', handleUp);
+                    btn.addEventListener('mousedown', handleDown);
+                    btn.addEventListener('mouseup', handleUp);
+                };
+
+                setupButton('btn-jump', 'jump');
+                setupButton('btn-meow', 'meow');
+            }
+
+            sendInput() {
+                const payload = {
+                    type: 'INPUT',
+                    input: this.inputState
+                };
+                if (this.conn && this.conn.open) {
+                    this.conn.send(payload);
+                }
+                if (this.bc) {
+                    this.bc.postMessage({ senderId: this.clientId, data: payload });
                 }
             }
         }
 
-        // =========================================================
-        // MULTIJUGADOR PEERJS Y LÓGICA DE RED
-        // =========================================================
+        // Window load routing
+        let game = null;
+        let controller = null;
 
-        function initHostMode() {
-            document.getElementById('mode-selector').classList.add('hidden');
-            document.getElementById('host-view').classList.remove('hidden');
-            document.getElementById('host-view').classList.add('flex');
-
-            const canvas = document.getElementById('gameCanvas');
-            game = new Game(canvas);
-
-            // Crear ID único de sala de 4 letras/números
-            const roomId = 'GATO' + Math.floor(1000 + Math.random() * 9000);
-            document.getElementById('host-id-display').innerText = roomId;
-
-            peer = new Peer(roomId);
-
-            peer.on('open', (id) => {
-                document.getElementById('connection-status').className = "w-3 h-3 rounded-full bg-green-500 shadow-lg shadow-green-500/50";
-                
-                // Generar QR para unirse fácilmente desde el celular
-                const joinUrl = `${window.location.protocol}//${window.location.host}${window.location.pathname}?room=${id}`;
-                new QRCode(document.getElementById("qrcode"), {
-                    text: joinUrl,
-                    width: 120,
-                    height: 120,
-                    colorDark: "#0f172a",
-                    colorLight: "#ffffff",
-                    correctLevel: QRCode.CorrectLevel.H
-                });
-            });
-
-            peer.on('connection', (conn) => {
-                connections.push(conn);
-                conn.on('data', (data) => handleHostData(data, conn));
-                conn.on('close', () => removePlayerFromHost(conn.peer));
-            });
-        }
-
-        function handleHostData(data, conn) {
-            if (data.type === 'JOIN') {
-                game.addPlayer(conn.peer, data.name, data.color, false);
-                updatePlayerListUI();
-                conn.send({ type: 'JOIN_ACK', status: 'OK' });
-            } else if (data.type === 'ACTION') {
-                if (data.action === 'JUMP') game.jumpPlayer(conn.peer);
-                if (data.action === 'MEOW') game.meowPlayer(conn.peer);
-            }
-        }
-
-        function removePlayerFromHost(peerId) {
-            if (game) game.removePlayer(peerId);
-            updatePlayerListUI();
-        }
-
-        function addBot() {
-            if (!game) return;
-            const botId = 'bot_' + Math.floor(Math.random() * 10000);
-            const botNames = ['MichiBot', 'GatoGamer', 'Kittynator', 'RoboMeow', 'FurryFast'];
-            const randomName = botNames[Math.floor(Math.random() * botNames.length)];
-            const randomColor = PLAYER_COLORS[Math.floor(Math.random() * PLAYER_COLORS.length)];
-
-            game.addPlayer(botId, randomName, randomColor, true);
-            updatePlayerListUI();
-        }
-
-        function updatePlayerListUI() {
-            const list = document.getElementById('player-list');
-            list.innerHTML = '';
-            game.players.forEach(p => {
-                const item = document.createElement('div');
-                item.className = "flex items-center justify-between bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-800 text-xs";
-                item.innerHTML = `
-                    <div class="flex items-center gap-2">
-                        <span class="w-3 h-3 rounded-full" style="background-color: ${p.color}"></span>
-                        <span class="font-bold">${p.name} ${p.isBot ? '🤖' : ''}</span>
-                    </div>
-                    <span class="text-[10px] text-green-400 font-mono">LISTO</span>
-                `;
-                list.appendChild(item);
-            });
-        }
-
-        function startGame() {
-            if (!game || game.players.size === 0) {
-                alert("¡Añade al menos a un jugador o Bot para empezar!");
-                return;
-            }
-            document.getElementById('lobby-overlay').classList.add('hidden');
-            document.getElementById('game-hud').classList.remove('hidden');
-            game.start();
-        }
-
-        // =========================================================
-        // MODO CONTROL REMOTO MÓVIL
-        // =========================================================
-
-        function initControllerMode() {
-            document.getElementById('mode-selector').classList.add('hidden');
-            document.getElementById('controller-view').classList.remove('hidden');
-            document.getElementById('controller-view').classList.add('flex');
-
-            // Renderizar selector de color
-            const picker = document.getElementById('color-picker');
-            picker.innerHTML = '';
-            PLAYER_COLORS.forEach((col, idx) => {
-                const btn = document.createElement('button');
-                btn.type = 'button';
-                btn.className = `w-8 h-8 rounded-full border-2 transition ${idx === 0 ? 'border-white scale-110' : 'border-transparent'}`;
-                btn.style.backgroundColor = col;
-                btn.onclick = () => {
-                    selectedColor = col;
-                    Array.from(picker.children).forEach(c => c.classList.replace('border-white', 'border-transparent'));
-                    btn.classList.replace('border-transparent', 'border-white');
-                };
-                picker.appendChild(btn);
-            });
-
-            // Verificar si entró mediante QR con parámetro 'room'
+        window.onload = () => {
             const urlParams = new URLSearchParams(window.location.search);
-            if (urlParams.has('room')) {
-                document.getElementById('join-room-id').value = urlParams.get('room');
+            const roomIdParam = urlParams.get('room');
+
+            if (roomIdParam) {
+                controller = new MobileController();
+                controller.init(roomIdParam);
+            } else {
+                game = new CatPlanetGame();
+                game.initPeerHost();
+                requestAnimationFrame((now) => game.loop(now));
             }
-        }
-
-        function connectToHost() {
-            const roomId = document.getElementById('join-room-id').value.trim().toUpperCase();
-            const name = document.getElementById('player-name').value.trim() || 'Michi';
-
-            if (!roomId) {
-                alert("Por favor introduce el código de la sala.");
-                return;
-            }
-
-            peer = new Peer();
-
-            peer.on('open', () => {
-                hostConn = peer.connect(roomId);
-
-                hostConn.on('open', () => {
-                    hostConn.send({
-                        type: 'JOIN',
-                        name: name,
-                        color: selectedColor
-                    });
-
-                    document.getElementById('controller-setup').classList.add('hidden');
-                    document.getElementById('controller-pad').classList.remove('hidden');
-                    document.getElementById('controller-pad').classList.add('flex');
-
-                    document.getElementById('pad-player-name').innerText = name;
-                    document.getElementById('pad-color-indicator').style.backgroundColor = selectedColor;
-
-                    bindTouchControls();
-                });
-
-                hostConn.on('data', (data) => {
-                    if (data.type === 'JOIN_ACK') {
-                        soundEngine.init();
-                    }
-                });
-
-                peer.on('error', (err) => {
-                    alert("Error al conectar con la sala. Verifica el código.");
-                });
-            });
-        }
-
-        function bindTouchControls() {
-            const btnJump = document.getElementById('btn-jump');
-            const btnMeow = document.getElementById('btn-meow');
-
-            const sendJump = (e) => {
-                e.preventDefault();
-                if (hostConn) hostConn.send({ type: 'ACTION', action: 'JUMP' });
-                soundEngine.playJump();
-            };
-
-            const sendMeow = (e) => {
-                e.preventDefault();
-                if (hostConn) hostConn.send({ type: 'ACTION', action: 'MEOW' });
-                soundEngine.playMeow();
-            };
-
-            btnJump.addEventListener('touchstart', sendJump);
-            btnJump.addEventListener('mousedown', sendJump);
-
-            btnMeow.addEventListener('touchstart', sendMeow);
-            btnMeow.addEventListener('mousedown', sendMeow);
-        }
-
-        // =========================================================
-        // UTILIDADES Y NOTIFICACIONES
-        // =========================================================
-
-        function showBanner(message) {
-            const banner = document.getElementById('banner-message');
-            banner.innerText = message;
-            banner.classList.remove('scale-0');
-            banner.classList.add('scale-100');
-
-            setTimeout(() => {
-                banner.classList.remove('scale-100');
-                banner.classList.add('scale-0');
-            }, 2500);
-        }
+        };
     </script>
 </body>
 </html>
