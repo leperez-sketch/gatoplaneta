@@ -889,17 +889,21 @@
                 const types = ['spike', 'double_spike', 'box', 'yarn_ball', 'fish_bone', 'cat_tree', 'laser_hurdle'];
                 const selectedType = types[Math.floor(Math.random() * types.length)];
                 
+                const vibrantColors = ['#ff007f', '#00f0ff', '#39ff14', '#ff5500', '#b026ff', '#ffea00', '#f43f5e', '#a855f7'];
+                const selectedColor = vibrantColors[Math.floor(Math.random() * vibrantColors.length)];
+
                 const obstacleData = {
                     angle: planetRelativeAngle,
                     type: selectedType,
-                    width: 26 + Math.random() * 12,
-                    height: 38 + Math.random() * 20,
-                    color: PLAYER_COLORS[Math.floor(Math.random() * PLAYER_COLORS.length)].hex
+                    width: 30 + Math.random() * 14,
+                    height: 42 + Math.random() * 22,
+                    color: selectedColor,
+                    secondaryColor: vibrantColors[Math.floor(Math.random() * vibrantColors.length)]
                 };
 
-                if (selectedType === 'yarn_ball') obstacleData.height = 36;
-                if (selectedType === 'fish_bone') obstacleData.height = 32;
-                if (selectedType === 'cat_tree') obstacleData.height = 58;
+                if (selectedType === 'yarn_ball') obstacleData.height = 40;
+                if (selectedType === 'fish_bone') obstacleData.height = 36;
+                if (selectedType === 'cat_tree') obstacleData.height = 62;
 
                 return obstacleData;
             }
@@ -1207,7 +1211,6 @@
                 this.ctx.save();
                 this.ctx.translate(p.x, p.y);
 
-                // Eyelid Blinking Logic
                 p.blinkTimer += 0.016;
                 if (p.blinkTimer > 3.5) {
                     if (p.blinkTimer > 3.68) {
@@ -1221,55 +1224,43 @@
                 const pupilOffsetX = Math.sin(time * 1.5) * 8;
                 const pupilOffsetY = Math.cos(time * 2.1) * 5;
 
-                // 1. PATAS LEVANTADAS (PAWS) - Dibuja las patas alzadas a ambos lados (según bosquejo en rojo)
                 this.drawCatPaws();
-
-                // 2. OREJAS MEJORADAS Y MÁS GRANDES
                 this.drawCatEar(-p.radius * 0.55, -p.radius * 0.82, -0.32, '#242021', '#f2a4ad');
                 this.drawCatEar(p.radius * 0.55, -p.radius * 0.82, 0.32, '#d96e28', '#f2a4ad');
 
-                // 3. PLANETA BASE (CUERPO DEL GATO CREMA CALICO)
                 this.ctx.beginPath();
                 this.ctx.arc(0, 0, p.radius, 0, Math.PI * 2);
                 this.ctx.fillStyle = '#fbf7ee';
                 this.ctx.fill();
 
-                // 4. MANCHAS CAREY (MANCHAS NEGRAS Y NARANJAS EN EL PELAJE)
                 this.ctx.save();
                 this.ctx.clip();
 
-                // Mancha Izquierda Negra
                 this.ctx.fillStyle = '#242021';
                 this.ctx.beginPath();
                 this.ctx.ellipse(-p.radius * 0.65, -p.radius * 0.45, p.radius * 0.55, p.radius * 0.6, 0.4, 0, Math.PI * 2);
                 this.ctx.fill();
 
-                // Mancha Derecha Naranja
                 this.ctx.fillStyle = '#d96e28';
                 this.ctx.beginPath();
                 this.ctx.ellipse(p.radius * 0.68, -p.radius * 0.35, p.radius * 0.52, p.radius * 0.55, -0.35, 0, Math.PI * 2);
                 this.ctx.fill();
 
-                // Mancha Superior Frente
                 this.ctx.fillStyle = '#c2571a';
                 this.ctx.beginPath();
                 this.ctx.ellipse(0, -p.radius * 0.88, p.radius * 0.28, p.radius * 0.22, 0, 0, Math.PI * 2);
                 this.ctx.fill();
                 this.ctx.restore();
 
-                // Borde del Planeta
                 this.ctx.lineWidth = 5;
                 this.ctx.strokeStyle = '#1e1b18';
                 this.ctx.stroke();
 
-                // 5. DETALLES DE LA CARA
                 const faceY = -p.radius * 0.42;
 
-                // Ojos brillantes
                 this.drawRealisticCatEye(-p.radius * 0.28, faceY, p.isBlinking, pupilOffsetX, pupilOffsetY);
                 this.drawRealisticCatEye(p.radius * 0.28, faceY, p.isBlinking, pupilOffsetX, pupilOffsetY);
 
-                // Nariz Rosada
                 const noseY = faceY + 42;
                 this.ctx.fillStyle = '#e26a7a';
                 this.ctx.beginPath();
@@ -1282,21 +1273,17 @@
                 this.ctx.strokeStyle = '#8c3541';
                 this.ctx.stroke();
 
-                // Orificios de la nariz
                 this.ctx.fillStyle = '#8c3541';
                 this.ctx.beginPath();
                 this.ctx.arc(-5, noseY + 4, 2, 0, Math.PI * 2);
                 this.ctx.arc(5, noseY + 4, 2, 0, Math.PI * 2);
                 this.ctx.fill();
 
-                // Boca animada
                 this.drawAnimatedMouth(0, noseY + 12, p.mouthOpen, Math.sin(p.purrTimer) * 1.5);
 
-                // Bigotes
                 this.drawWhiskers(-p.radius * 0.32, noseY + 14, true);
                 this.drawWhiskers(p.radius * 0.32, noseY + 14, false);
 
-                // Mejillas rosadas
                 this.ctx.fillStyle = 'rgba(244, 114, 182, 0.35)';
                 this.ctx.beginPath();
                 this.ctx.ellipse(-p.radius * 0.48, noseY + 12, 22, 14, 0, 0, Math.PI * 2);
@@ -1312,7 +1299,6 @@
                 const waveLeft = Math.sin(time * 2) * 8;
                 const waveRight = Math.cos(time * 2) * 8;
 
-                // Pata Izquierda (Negra con almohadillas rosadas)
                 this.ctx.save();
                 this.ctx.translate(-p.radius * 1.08, -p.radius * 0.05 + waveLeft);
                 this.ctx.rotate(-0.25);
@@ -1332,7 +1318,6 @@
                 this.ctx.fill();
                 this.ctx.stroke();
 
-                // Huellitas rosadas
                 this.ctx.fillStyle = '#f2a4ad';
                 this.ctx.beginPath();
                 this.ctx.ellipse(0, -25, 22, 18, 0, 0, Math.PI * 2);
@@ -1345,7 +1330,6 @@
                 this.ctx.fill();
                 this.ctx.restore();
 
-                // Pata Derecha (Naranja con almohadillas rosadas)
                 this.ctx.save();
                 this.ctx.translate(p.radius * 1.08, -p.radius * 0.05 + waveRight);
                 this.ctx.rotate(0.25);
@@ -1365,7 +1349,6 @@
                 this.ctx.fill();
                 this.ctx.stroke();
 
-                // Huellitas rosadas
                 this.ctx.fillStyle = '#f2a4ad';
                 this.ctx.beginPath();
                 this.ctx.ellipse(0, -25, 22, 18, 0, 0, Math.PI * 2);
@@ -1384,7 +1367,6 @@
                 this.ctx.translate(x, y);
                 this.ctx.rotate(rotation);
 
-                // Oreja exterior más amplia y apuntada
                 this.ctx.fillStyle = outerColor;
                 this.ctx.beginPath();
                 this.ctx.moveTo(0, -135);
@@ -1396,7 +1378,6 @@
                 this.ctx.strokeStyle = '#1e1b18';
                 this.ctx.stroke();
 
-                // Oreja interior rosada
                 this.ctx.fillStyle = innerColor;
                 this.ctx.beginPath();
                 this.ctx.moveTo(0, -110);
@@ -1405,7 +1386,6 @@
                 this.ctx.closePath();
                 this.ctx.fill();
 
-                // Pelos internos
                 this.ctx.strokeStyle = '#ffffff';
                 this.ctx.lineWidth = 2.5;
                 this.ctx.beginPath();
@@ -1512,8 +1492,10 @@
                 }
             }
 
+            // MEJORAS DE VISUALIZACIÓN EN OBSTÁCULOS (Texturas, Efectos, Animaciones y Color)
             drawObstacles() {
                 const p = this.planet;
+                const time = performance.now() * 0.001;
 
                 this.obstacles.forEach((obs) => {
                     const angle = obs.angle + p.angle;
@@ -1524,64 +1506,363 @@
                     this.ctx.translate(x, y);
                     this.ctx.rotate(angle + Math.PI / 2);
 
-                    this.ctx.fillStyle = obs.color || '#ff0055';
-                    this.ctx.strokeStyle = '#ffffff';
-                    this.ctx.lineWidth = 2.5;
+                    const w = obs.width;
+                    const h = obs.height;
+                    const primaryColor = obs.color || '#ff007f';
+                    const secondaryColor = obs.secondaryColor || '#00f0ff';
+
+                    // Sombra de contacto suave sobre el planeta
+                    this.ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+                    this.ctx.beginPath();
+                    this.ctx.ellipse(0, 2, w * 0.6, 6, 0, 0, Math.PI * 2);
+                    this.ctx.fill();
 
                     if (obs.type === 'spike') {
+                        // CRISTAL FACETADO 3D CON DEGRADADOS Y DESTELLO ANIMADO
+                        // Cara Izquierda
+                        const gradLeft = this.ctx.createLinearGradient(-w / 2, 0, 0, -h);
+                        gradLeft.addColorStop(0, primaryColor);
+                        gradLeft.addColorStop(1, '#ffffff');
+
+                        // Cara Derecha
+                        const gradRight = this.ctx.createLinearGradient(w / 2, 0, 0, -h);
+                        gradRight.addColorStop(0, primaryColor);
+                        gradRight.addColorStop(1, '#0f172a');
+
+                        this.ctx.fillStyle = gradLeft;
                         this.ctx.beginPath();
-                        this.ctx.moveTo(0, -obs.height);
-                        this.ctx.lineTo(-obs.width / 2, 0);
-                        this.ctx.lineTo(obs.width / 2, 0);
+                        this.ctx.moveTo(0, -h);
+                        this.ctx.lineTo(-w / 2, 0);
+                        this.ctx.lineTo(0, -h * 0.15);
                         this.ctx.closePath();
                         this.ctx.fill();
+
+                        this.ctx.fillStyle = gradRight;
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(0, -h);
+                        this.ctx.lineTo(w / 2, 0);
+                        this.ctx.lineTo(0, -h * 0.15);
+                        this.ctx.closePath();
+                        this.ctx.fill();
+
+                        // Borde de cristal brillante
+                        this.ctx.strokeStyle = '#ffffff';
+                        this.ctx.lineWidth = 2;
                         this.ctx.stroke();
+
+                        // Destello animado en la punta
+                        const flareSize = 4 + Math.sin(time * 8) * 3;
+                        this.ctx.fillStyle = '#ffffff';
+                        this.ctx.beginPath();
+                        this.ctx.arc(0, -h, flareSize, 0, Math.PI * 2);
+                        this.ctx.fill();
+
                     } else if (obs.type === 'double_spike') {
+                        // DOBLE PÚA GEMELA CON ARCO DE ENERGÍA/ELECTRICIDAD
+                        const drawSingleCrystal = (cx, cy, cw, ch, col) => {
+                            this.ctx.save();
+                            this.ctx.translate(cx, cy);
+
+                            const gL = this.ctx.createLinearGradient(-cw / 2, 0, 0, -ch);
+                            gL.addColorStop(0, col);
+                            gL.addColorStop(1, '#ffffff');
+
+                            const gR = this.ctx.createLinearGradient(cw / 2, 0, 0, -ch);
+                            gR.addColorStop(0, col);
+                            gR.addColorStop(1, '#1e1b18');
+
+                            this.ctx.fillStyle = gL;
+                            this.ctx.beginPath();
+                            this.ctx.moveTo(0, -ch);
+                            this.ctx.lineTo(-cw / 2, 0);
+                            this.ctx.lineTo(0, -ch * 0.2);
+                            this.ctx.closePath();
+                            this.ctx.fill();
+
+                            this.ctx.fillStyle = gR;
+                            this.ctx.beginPath();
+                            this.ctx.moveTo(0, -ch);
+                            this.ctx.lineTo(cw / 2, 0);
+                            this.ctx.lineTo(0, -ch * 0.2);
+                            this.ctx.closePath();
+                            this.ctx.fill();
+
+                            this.ctx.strokeStyle = '#ffffff';
+                            this.ctx.lineWidth = 1.5;
+                            this.ctx.stroke();
+                            this.ctx.restore();
+                        };
+
+                        drawSingleCrystal(-w * 0.28, 0, w * 0.55, h, primaryColor);
+                        drawSingleCrystal(w * 0.28, 0, w * 0.5, h * 0.85, secondaryColor);
+
+                        // Rayo de energía pulsante entre ambas puntas
+                        this.ctx.strokeStyle = '#5eead4';
+                        this.ctx.lineWidth = 2;
                         this.ctx.beginPath();
-                        this.ctx.moveTo(-obs.width * 0.3, -obs.height);
-                        this.ctx.lineTo(-obs.width / 2, 0);
-                        this.ctx.lineTo(0, 0);
-                        this.ctx.moveTo(obs.width * 0.3, -obs.height * 0.85);
-                        this.ctx.lineTo(0, 0);
-                        this.ctx.lineTo(obs.width / 2, 0);
-                        this.ctx.closePath();
-                        this.ctx.fill();
+                        this.ctx.moveTo(-w * 0.28, -h);
+                        const midX = (Math.random() - 0.5) * 8;
+                        const midY = -h * 0.9;
+                        this.ctx.lineTo(midX, midY);
+                        this.ctx.lineTo(w * 0.28, -h * 0.85);
                         this.ctx.stroke();
+
                     } else if (obs.type === 'box') {
-                        this.ctx.fillRect(-obs.width / 2, -obs.height, obs.width, obs.height);
-                        this.ctx.strokeRect(-obs.width / 2, -obs.height, obs.width, obs.height);
-                    } else if (obs.type === 'yarn_ball') {
+                        // CAJA DE CARTÓN CON OJITOS DE GATO QUE PARPADAN EN EL INTERIOR
+                        const bw = w + 8;
+                        const bh = h;
+
+                        // Gradiente de textura de cartón
+                        const boxGrad = this.ctx.createLinearGradient(-bw / 2, -bh, bw / 2, 0);
+                        boxGrad.addColorStop(0, '#d97706');
+                        boxGrad.addColorStop(0.5, '#b45309');
+                        boxGrad.addColorStop(1, '#78350f');
+
+                        this.ctx.fillStyle = boxGrad;
+                        this.ctx.fillRect(-bw / 2, -bh + 12, bw, bh - 12);
+                        this.ctx.strokeStyle = '#451a03';
+                        this.ctx.lineWidth = 2.5;
+                        this.ctx.strokeRect(-bw / 2, -bh + 12, bw, bh - 12);
+
+                        // Tapas abiertas de la caja
+                        this.ctx.fillStyle = '#b45309';
                         this.ctx.beginPath();
-                        this.ctx.arc(0, -obs.height / 2, obs.height / 2, 0, Math.PI * 2);
-                        this.ctx.fill();
-                        this.ctx.stroke();
-                        this.ctx.strokeStyle = '#000000';
-                        this.ctx.beginPath();
-                        this.ctx.arc(-2, -obs.height / 2, obs.height / 3, 0.2, Math.PI);
-                        this.ctx.stroke();
-                    } else if (obs.type === 'fish_bone') {
-                        this.ctx.fillStyle = '#e2e8f0';
-                        this.ctx.beginPath();
-                        this.ctx.moveTo(0, -obs.height);
-                        this.ctx.lineTo(-12, -obs.height + 10);
-                        this.ctx.lineTo(0, -obs.height + 15);
-                        this.ctx.lineTo(12, -obs.height + 10);
+                        this.ctx.moveTo(-bw / 2, -bh + 12);
+                        this.ctx.lineTo(-bw / 2 - 8, -bh - 4);
+                        this.ctx.lineTo(-2, -bh + 12);
                         this.ctx.closePath();
                         this.ctx.fill();
                         this.ctx.stroke();
-                        this.ctx.fillRect(-2, -obs.height + 15, 4, obs.height - 15);
+
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(bw / 2, -bh + 12);
+                        this.ctx.lineTo(bw / 2 + 8, -bh - 4);
+                        this.ctx.lineTo(2, -bh + 12);
+                        this.ctx.closePath();
+                        this.ctx.fill();
+                        this.ctx.stroke();
+
+                        // Interior oscuro
+                        this.ctx.fillStyle = '#0f172a';
+                        this.ctx.fillRect(-bw / 2 + 4, -bh + 12, bw - 8, 14);
+
+                        // Ojitos misteriosos brillando dentro de la caja
+                        const blink = Math.sin(time * 4) > 0.88;
+                        if (!blink) {
+                            this.ctx.fillStyle = '#facc15';
+                            this.ctx.beginPath();
+                            this.ctx.ellipse(-6, -bh + 19, 3, 4, 0, 0, Math.PI * 2);
+                            this.ctx.ellipse(6, -bh + 19, 3, 4, 0, 0, Math.PI * 2);
+                            this.ctx.fill();
+
+                            this.ctx.fillStyle = '#000000';
+                            this.ctx.beginPath();
+                            this.ctx.arc(-6, -bh + 19, 1.2, 0, Math.PI * 2);
+                            this.ctx.arc(6, -bh + 19, 1.2, 0, Math.PI * 2);
+                            this.ctx.fill();
+                        }
+
+                        // Etiqueta / Cinta de embalaje
+                        this.ctx.fillStyle = '#fef08a';
+                        this.ctx.fillRect(-8, -bh + 30, 16, bh - 32);
+                        this.ctx.fillStyle = '#78350f';
+                        this.ctx.font = 'bold 9px sans-serif';
+                        this.ctx.textAlign = 'center';
+                        this.ctx.fillText('🐾', 0, -bh + 42);
+
+                    } else if (obs.type === 'yarn_ball') {
+                        // BOLA DE ESTAMBRE CON TEXTURA EN ESPIRAL E HILO MOVIÉNDOSE
+                        const radius = h * 0.48;
+                        const centerY = -radius;
+
+                        // Esfera con degradado 3D
+                        const yarnGrad = this.ctx.createRadialGradient(-radius * 0.3, centerY - radius * 0.3, radius * 0.1, 0, centerY, radius);
+                        yarnGrad.addColorStop(0, '#ffffff');
+                        yarnGrad.addColorStop(0.3, primaryColor);
+                        yarnGrad.addColorStop(1, '#1e1b18');
+
+                        this.ctx.fillStyle = yarnGrad;
+                        this.ctx.beginPath();
+                        this.ctx.arc(0, centerY, radius, 0, Math.PI * 2);
+                        this.ctx.fill();
+
+                        // Líneas de hilo envolventes (Textura de estambre)
+                        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+                        this.ctx.lineWidth = 2.5;
+
+                        for (let i = -2; i <= 2; i++) {
+                            this.ctx.beginPath();
+                            this.ctx.arc(0, centerY, radius * 0.85, (i * 0.3) - 0.5, (i * 0.3) + 1.2);
+                            this.ctx.stroke();
+                        }
+
+                        // Hilo suelto ondeando en la parte trasera
+                        const wave = Math.sin(time * 6) * 12;
+                        this.ctx.strokeStyle = primaryColor;
+                        this.ctx.lineWidth = 3.5;
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(radius * 0.6, centerY + radius * 0.4);
+                        this.ctx.quadraticCurveTo(radius * 1.3, centerY + radius * 0.8 + wave, radius * 1.8, centerY + radius * 0.2);
+                        this.ctx.stroke();
+
+                    } else if (obs.type === 'fish_bone') {
+                        // ESPINA DE PESCADO DETALLADA CON CRÁNEO Y LUZ BIOLUMINISCENTE
+                        const bh = h;
+
+                        this.ctx.save();
+                        this.ctx.shadowColor = secondaryColor;
+                        this.ctx.shadowBlur = 10;
+
+                        // Cabeza / Cráneo de Pez
+                        this.ctx.fillStyle = '#f8fafc';
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(0, -bh);
+                        this.ctx.lineTo(-15, -bh + 18);
+                        this.ctx.lineTo(0, -bh + 22);
+                        this.ctx.lineTo(15, -bh + 18);
+                        this.ctx.closePath();
+                        this.ctx.fill();
+
+                        // Ojo del pez (X)
+                        this.ctx.strokeStyle = '#0f172a';
+                        this.ctx.lineWidth = 2;
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(-7, -bh + 10); this.ctx.lineTo(-3, -bh + 14);
+                        this.ctx.moveTo(-3, -bh + 10); this.ctx.lineTo(-7, -bh + 14);
+                        this.ctx.stroke();
+
+                        // Columna Espinal
+                        this.ctx.strokeStyle = '#f8fafc';
+                        this.ctx.lineWidth = 4;
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(0, -bh + 22);
+                        this.ctx.lineTo(0, -4);
+                        this.ctx.stroke();
+
+                        // Espinas laterales
+                        this.ctx.lineWidth = 3;
+                        const ribY = [-bh + 28, -bh + 38, -bh + 48];
+                        const ribW = [16, 12, 8];
+
+                        ribY.forEach((yPos, idx) => {
+                            const rw = ribW[idx];
+                            this.ctx.beginPath();
+                            this.ctx.moveTo(-rw, yPos - 3);
+                            this.ctx.lineTo(0, yPos);
+                            this.ctx.lineTo(rw, yPos - 3);
+                            this.ctx.stroke();
+                        });
+
+                        // Cola del pez
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(0, -4);
+                        this.ctx.lineTo(-12, 2);
+                        this.ctx.lineTo(0, -2);
+                        this.ctx.lineTo(12, 2);
+                        this.ctx.closePath();
+                        this.ctx.fill();
+
+                        this.ctx.restore();
+
                     } else if (obs.type === 'cat_tree') {
-                        this.ctx.fillStyle = '#854d0e';
-                        this.ctx.fillRect(-6, -obs.height, 12, obs.height);
-                        this.ctx.fillStyle = obs.color;
-                        this.ctx.fillRect(-obs.width / 2, -obs.height, obs.width, 10);
-                        this.ctx.strokeRect(-obs.width / 2, -obs.height, obs.width, 10);
+                        // ÁRBOLES RASCADORES CON TEXTURA DE CUERDA DE YUTE Y JUGUETE COLGANTE
+                        const th = h;
+
+                        // Poste central con textura de cuerda de yute (rayado horizontal)
+                        const postGrad = this.ctx.createLinearGradient(-8, 0, 8, 0);
+                        postGrad.addColorStop(0, '#78350f');
+                        postGrad.addColorStop(0.5, '#d97706');
+                        postGrad.addColorStop(1, '#451a03');
+
+                        this.ctx.fillStyle = postGrad;
+                        this.ctx.fillRect(-7, -th, 14, th);
+
+                        // Textura de cuerda
+                        this.ctx.strokeStyle = '#451a03';
+                        this.ctx.lineWidth = 1.5;
+                        for (let yPos = -th + 4; yPos < 0; yPos += 5) {
+                            this.ctx.beginPath();
+                            this.ctx.moveTo(-7, yPos);
+                            this.ctx.lineTo(7, yPos + 2);
+                            this.ctx.stroke();
+                        }
+
+                        // Plataforma alfombrada (Felpa)
+                        const platW = w + 6;
+                        this.ctx.fillStyle = primaryColor;
+                        if (this.ctx.roundRect) {
+                            this.ctx.beginPath();
+                            this.ctx.roundRect(-platW / 2, -th, platW, 12, 4);
+                            this.ctx.fill();
+                        } else {
+                            this.ctx.fillRect(-platW / 2, -th, platW, 12);
+                        }
+                        this.ctx.strokeStyle = '#ffffff';
+                        this.ctx.lineWidth = 2;
+                        this.ctx.stroke();
+
+                        // Juguete colgante animado (Pelotita con hilo)
+                        const swing = Math.sin(time * 5) * 10;
+                        this.ctx.strokeStyle = '#ffffff';
+                        this.ctx.lineWidth = 1.5;
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(-platW / 3, -th + 12);
+                        this.ctx.lineTo(-platW / 3 + swing, -th + 26);
+                        this.ctx.stroke();
+
+                        this.ctx.fillStyle = secondaryColor;
+                        this.ctx.beginPath();
+                        this.ctx.arc(-platW / 3 + swing, -th + 29, 5, 0, Math.PI * 2);
+                        this.ctx.fill();
+
                     } else if (obs.type === 'laser_hurdle') {
-                        this.ctx.fillStyle = '#38bdf8';
-                        this.ctx.fillRect(-obs.width / 2, -obs.height, 6, obs.height);
-                        this.ctx.fillRect(obs.width / 2 - 6, -obs.height, 6, obs.height);
+                        // TORRETAS METÁLICAS CYBERPUNK CON HAZ LÁSER NEÓN ENERGIZADO
+                        const lw = w;
+                        const lh = h;
+
+                        // Torretas laterales
+                        const drawPylon = (px) => {
+                            const pylonGrad = this.ctx.createLinearGradient(px - 5, -lh, px + 5, 0);
+                            pylonGrad.addColorStop(0, '#475569');
+                            pylonGrad.addColorStop(0.5, '#94a3b8');
+                            pylonGrad.addColorStop(1, '#0f172a');
+
+                            this.ctx.fillStyle = pylonGrad;
+                            this.ctx.fillRect(px - 5, -lh, 10, lh);
+                            this.ctx.strokeStyle = '#38bdf8';
+                            this.ctx.lineWidth = 1.5;
+                            this.ctx.strokeRect(px - 5, -lh, 10, lh);
+
+                            // Luz indicadora en la punta
+                            this.ctx.fillStyle = Math.sin(time * 10) > 0 ? '#ef4444' : '#22c55e';
+                            this.ctx.beginPath();
+                            this.ctx.arc(px, -lh - 3, 3, 0, Math.PI * 2);
+                            this.ctx.fill();
+                        };
+
+                        drawPylon(-lw / 2);
+                        drawPylon(lw / 2);
+
+                        // Haz Láser Resplandeciente
+                        this.ctx.save();
+                        this.ctx.shadowColor = '#f43f5e';
+                        this.ctx.shadowBlur = 15;
+
                         this.ctx.fillStyle = '#f43f5e';
-                        this.ctx.fillRect(-obs.width / 2, -obs.height + 4, obs.width, 8);
+                        this.ctx.fillRect(-lw / 2 + 5, -lh + 6, lw - 10, 8);
+
+                        // Núcleo caliente blanco
+                        this.ctx.fillStyle = '#ffffff';
+                        this.ctx.fillRect(-lw / 2 + 5, -lh + 9, lw - 10, 2);
+
+                        // Partícula de energía viajando por el láser
+                        const sparkX = -lw / 2 + 5 + ((time * 120) % (lw - 10));
+                        this.ctx.fillStyle = '#fef08a';
+                        this.ctx.beginPath();
+                        this.ctx.arc(sparkX, -lh + 10, 4, 0, Math.PI * 2);
+                        this.ctx.fill();
+
+                        this.ctx.restore();
                     }
 
                     this.ctx.restore();
@@ -1610,9 +1891,8 @@
                 });
             }
 
-            // Dibujo de personaje incrementado en un 30% (+30%)
             drawStickman(player) {
-                const scale = 1.3; // Factor de escala +30%
+                const scale = 1.3;
 
                 this.ctx.strokeStyle = player.color;
                 this.ctx.lineWidth = 4.5;
@@ -1620,14 +1900,12 @@
 
                 const isJumping = !player.isGrounded;
 
-                // Cabeza
                 this.ctx.beginPath();
                 this.ctx.arc(0, -42 * scale, 9 * scale, 0, Math.PI * 2);
                 this.ctx.fillStyle = '#ffffff';
                 this.ctx.fill();
                 this.ctx.stroke();
 
-                // Torso
                 this.ctx.beginPath();
                 this.ctx.moveTo(0, -33 * scale);
                 this.ctx.lineTo(0, -15 * scale);
@@ -1681,9 +1959,7 @@
                 }
             }
 
-            // Dibujo de Nameplate incrementado en un 40% (+40%)
             drawNameplate(player) {
-                // Tamaño de fuente 15px (+40% de 11px)
                 this.ctx.font = 'bold 15px sans-serif';
                 const textWidth = this.ctx.measureText(player.name).width;
 
