@@ -149,7 +149,7 @@
                     <div class="mt-4 pt-4 border-t border-slate-700/80">
                         <div class="mb-3 text-xs text-slate-400 bg-slate-950/50 p-2 rounded border border-slate-800 flex justify-between items-center">
                             <span>🎮 Mando local en PC:</span>
-                            <span class="font-mono text-yellow-300">Espacio / Flecha Arriba (SALTAR)</span>
+                            <span class="font-mono text-yellow-300">Espacio / Flecha Arriba (SALTAR) | M (MIAU)</span>
                         </div>
                         <button id="start-game-btn" onclick="game.startMatchFromLobby()" class="w-full py-4 bg-gradient-to-r from-yellow-500 via-amber-500 to-yellow-400 hover:from-yellow-400 hover:to-amber-300 text-slate-950 font-extrabold text-lg rounded-xl shadow-lg shadow-yellow-500/20 transform hover:-translate-y-0.5 transition active:translate-y-0">
                             🚀 ¡INICIAR JUEGO!
@@ -285,7 +285,7 @@
             { name: 'Rojo Carmesi', hex: '#ff0033' }
         ];
 
-        // Sound Engine con música de fondo por archivo W&W.mp3
+        // Sound Engine con música de fondo (W&W.mp3) y efecto de maullido (120.mp3)
         class SoundEngine {
             constructor() {
                 this.ctx = null;
@@ -293,6 +293,7 @@
                 this.tempo = 140;
                 this.bgm = new Audio('W&W.mp3');
                 this.bgm.loop = true;
+                this.meowAudio = new Audio('120.mp3'); // Archivo mp3 para el sonido de miau
             }
 
             init() {
@@ -327,28 +328,17 @@
                 osc.stop(now + 0.15);
             }
 
+            // REEMPLAZADO: Reproduce el archivo 120.mp3 mediante clonación para permitir solapamiento
             playMeow() {
                 if (this.isMuted) return;
                 this.init();
-                if (!this.ctx) return;
-
-                const osc = this.ctx.createOscillator();
-                const gain = this.ctx.createGain();
-                osc.type = 'triangle';
-                const now = this.ctx.currentTime;
-
-                osc.frequency.setValueAtTime(450, now);
-                osc.frequency.linearRampToValueAtTime(780, now + 0.12);
-                osc.frequency.linearRampToValueAtTime(320, now + 0.35);
-
-                gain.gain.setValueAtTime(0.3, now);
-                gain.gain.linearRampToValueAtTime(0.35, now + 0.12);
-                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
-
-                osc.connect(gain);
-                gain.connect(this.ctx.destination);
-                osc.start(now);
-                osc.stop(now + 0.35);
+                try {
+                    const soundClone = this.meowAudio.cloneNode();
+                    soundClone.volume = 0.85;
+                    soundClone.play().catch(e => console.log('Reproducción diferida de 120.mp3:', e));
+                } catch (e) {
+                    console.warn('Error al reproducir 120.mp3:', e);
+                }
             }
 
             playSpeedUp() {
@@ -1492,7 +1482,6 @@
                 }
             }
 
-            // MEJORAS DE VISUALIZACIÓN EN OBSTÁCULOS (Texturas, Efectos, Animaciones y Color)
             drawObstacles() {
                 const p = this.planet;
                 const time = performance.now() * 0.001;
@@ -1519,12 +1508,10 @@
 
                     if (obs.type === 'spike') {
                         // CRISTAL FACETADO 3D CON DEGRADADOS Y DESTELLO ANIMADO
-                        // Cara Izquierda
                         const gradLeft = this.ctx.createLinearGradient(-w / 2, 0, 0, -h);
                         gradLeft.addColorStop(0, primaryColor);
                         gradLeft.addColorStop(1, '#ffffff');
 
-                        // Cara Derecha
                         const gradRight = this.ctx.createLinearGradient(w / 2, 0, 0, -h);
                         gradRight.addColorStop(0, primaryColor);
                         gradRight.addColorStop(1, '#0f172a');
@@ -1545,12 +1532,10 @@
                         this.ctx.closePath();
                         this.ctx.fill();
 
-                        // Borde de cristal brillante
                         this.ctx.strokeStyle = '#ffffff';
                         this.ctx.lineWidth = 2;
                         this.ctx.stroke();
 
-                        // Destello animado en la punta
                         const flareSize = 4 + Math.sin(time * 8) * 3;
                         this.ctx.fillStyle = '#ffffff';
                         this.ctx.beginPath();
@@ -1558,7 +1543,7 @@
                         this.ctx.fill();
 
                     } else if (obs.type === 'double_spike') {
-                        // DOBLE PÚA GEMELA CON ARCO DE ENERGÍA/ELECTRICIDAD
+                        // DOBLE PÚA GEMELA CON ARCO DE ENERGÍA
                         const drawSingleCrystal = (cx, cy, cw, ch, col) => {
                             this.ctx.save();
                             this.ctx.translate(cx, cy);
@@ -1596,7 +1581,6 @@
                         drawSingleCrystal(-w * 0.28, 0, w * 0.55, h, primaryColor);
                         drawSingleCrystal(w * 0.28, 0, w * 0.5, h * 0.85, secondaryColor);
 
-                        // Rayo de energía pulsante entre ambas puntas
                         this.ctx.strokeStyle = '#5eead4';
                         this.ctx.lineWidth = 2;
                         this.ctx.beginPath();
@@ -1608,11 +1592,10 @@
                         this.ctx.stroke();
 
                     } else if (obs.type === 'box') {
-                        // CAJA DE CARTÓN CON OJITOS DE GATO QUE PARPADAN EN EL INTERIOR
+                        // CAJA DE CARTÓN CON OJITOS
                         const bw = w + 8;
                         const bh = h;
 
-                        // Gradiente de textura de cartón
                         const boxGrad = this.ctx.createLinearGradient(-bw / 2, -bh, bw / 2, 0);
                         boxGrad.addColorStop(0, '#d97706');
                         boxGrad.addColorStop(0.5, '#b45309');
@@ -1624,7 +1607,6 @@
                         this.ctx.lineWidth = 2.5;
                         this.ctx.strokeRect(-bw / 2, -bh + 12, bw, bh - 12);
 
-                        // Tapas abiertas de la caja
                         this.ctx.fillStyle = '#b45309';
                         this.ctx.beginPath();
                         this.ctx.moveTo(-bw / 2, -bh + 12);
@@ -1642,11 +1624,9 @@
                         this.ctx.fill();
                         this.ctx.stroke();
 
-                        // Interior oscuro
                         this.ctx.fillStyle = '#0f172a';
                         this.ctx.fillRect(-bw / 2 + 4, -bh + 12, bw - 8, 14);
 
-                        // Ojitos misteriosos brillando dentro de la caja
                         const blink = Math.sin(time * 4) > 0.88;
                         if (!blink) {
                             this.ctx.fillStyle = '#facc15';
@@ -1662,7 +1642,6 @@
                             this.ctx.fill();
                         }
 
-                        // Etiqueta / Cinta de embalaje
                         this.ctx.fillStyle = '#fef08a';
                         this.ctx.fillRect(-8, -bh + 30, 16, bh - 32);
                         this.ctx.fillStyle = '#78350f';
@@ -1671,11 +1650,10 @@
                         this.ctx.fillText('🐾', 0, -bh + 42);
 
                     } else if (obs.type === 'yarn_ball') {
-                        // BOLA DE ESTAMBRE CON TEXTURA EN ESPIRAL E HILO MOVIÉNDOSE
+                        // BOLA DE ESTAMBRE EN ESPIRAL
                         const radius = h * 0.48;
                         const centerY = -radius;
 
-                        // Esfera con degradado 3D
                         const yarnGrad = this.ctx.createRadialGradient(-radius * 0.3, centerY - radius * 0.3, radius * 0.1, 0, centerY, radius);
                         yarnGrad.addColorStop(0, '#ffffff');
                         yarnGrad.addColorStop(0.3, primaryColor);
@@ -1686,7 +1664,6 @@
                         this.ctx.arc(0, centerY, radius, 0, Math.PI * 2);
                         this.ctx.fill();
 
-                        // Líneas de hilo envolventes (Textura de estambre)
                         this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
                         this.ctx.lineWidth = 2.5;
 
@@ -1696,7 +1673,6 @@
                             this.ctx.stroke();
                         }
 
-                        // Hilo suelto ondeando en la parte trasera
                         const wave = Math.sin(time * 6) * 12;
                         this.ctx.strokeStyle = primaryColor;
                         this.ctx.lineWidth = 3.5;
@@ -1706,14 +1682,13 @@
                         this.ctx.stroke();
 
                     } else if (obs.type === 'fish_bone') {
-                        // ESPINA DE PESCADO DETALLADA CON CRÁNEO Y LUZ BIOLUMINISCENTE
+                        // ESPINA DE PESCADO DETALLADA
                         const bh = h;
 
                         this.ctx.save();
                         this.ctx.shadowColor = secondaryColor;
                         this.ctx.shadowBlur = 10;
 
-                        // Cabeza / Cráneo de Pez
                         this.ctx.fillStyle = '#f8fafc';
                         this.ctx.beginPath();
                         this.ctx.moveTo(0, -bh);
@@ -1723,7 +1698,6 @@
                         this.ctx.closePath();
                         this.ctx.fill();
 
-                        // Ojo del pez (X)
                         this.ctx.strokeStyle = '#0f172a';
                         this.ctx.lineWidth = 2;
                         this.ctx.beginPath();
@@ -1731,7 +1705,6 @@
                         this.ctx.moveTo(-3, -bh + 10); this.ctx.lineTo(-7, -bh + 14);
                         this.ctx.stroke();
 
-                        // Columna Espinal
                         this.ctx.strokeStyle = '#f8fafc';
                         this.ctx.lineWidth = 4;
                         this.ctx.beginPath();
@@ -1739,7 +1712,6 @@
                         this.ctx.lineTo(0, -4);
                         this.ctx.stroke();
 
-                        // Espinas laterales
                         this.ctx.lineWidth = 3;
                         const ribY = [-bh + 28, -bh + 38, -bh + 48];
                         const ribW = [16, 12, 8];
@@ -1753,7 +1725,6 @@
                             this.ctx.stroke();
                         });
 
-                        // Cola del pez
                         this.ctx.beginPath();
                         this.ctx.moveTo(0, -4);
                         this.ctx.lineTo(-12, 2);
@@ -1765,10 +1736,9 @@
                         this.ctx.restore();
 
                     } else if (obs.type === 'cat_tree') {
-                        // ÁRBOLES RASCADORES CON TEXTURA DE CUERDA DE YUTE Y JUGUETE COLGANTE
+                        // ÁRBOL RASCADOR DE YUTE
                         const th = h;
 
-                        // Poste central con textura de cuerda de yute (rayado horizontal)
                         const postGrad = this.ctx.createLinearGradient(-8, 0, 8, 0);
                         postGrad.addColorStop(0, '#78350f');
                         postGrad.addColorStop(0.5, '#d97706');
@@ -1777,7 +1747,6 @@
                         this.ctx.fillStyle = postGrad;
                         this.ctx.fillRect(-7, -th, 14, th);
 
-                        // Textura de cuerda
                         this.ctx.strokeStyle = '#451a03';
                         this.ctx.lineWidth = 1.5;
                         for (let yPos = -th + 4; yPos < 0; yPos += 5) {
@@ -1787,7 +1756,6 @@
                             this.ctx.stroke();
                         }
 
-                        // Plataforma alfombrada (Felpa)
                         const platW = w + 6;
                         this.ctx.fillStyle = primaryColor;
                         if (this.ctx.roundRect) {
@@ -1801,7 +1769,6 @@
                         this.ctx.lineWidth = 2;
                         this.ctx.stroke();
 
-                        // Juguete colgante animado (Pelotita con hilo)
                         const swing = Math.sin(time * 5) * 10;
                         this.ctx.strokeStyle = '#ffffff';
                         this.ctx.lineWidth = 1.5;
@@ -1816,11 +1783,10 @@
                         this.ctx.fill();
 
                     } else if (obs.type === 'laser_hurdle') {
-                        // TORRETAS METÁLICAS CYBERPUNK CON HAZ LÁSER NEÓN ENERGIZADO
+                        // TORRETA LÁSER CYBERPUNK
                         const lw = w;
                         const lh = h;
 
-                        // Torretas laterales
                         const drawPylon = (px) => {
                             const pylonGrad = this.ctx.createLinearGradient(px - 5, -lh, px + 5, 0);
                             pylonGrad.addColorStop(0, '#475569');
@@ -1833,7 +1799,6 @@
                             this.ctx.lineWidth = 1.5;
                             this.ctx.strokeRect(px - 5, -lh, 10, lh);
 
-                            // Luz indicadora en la punta
                             this.ctx.fillStyle = Math.sin(time * 10) > 0 ? '#ef4444' : '#22c55e';
                             this.ctx.beginPath();
                             this.ctx.arc(px, -lh - 3, 3, 0, Math.PI * 2);
@@ -1843,7 +1808,6 @@
                         drawPylon(-lw / 2);
                         drawPylon(lw / 2);
 
-                        // Haz Láser Resplandeciente
                         this.ctx.save();
                         this.ctx.shadowColor = '#f43f5e';
                         this.ctx.shadowBlur = 15;
@@ -1851,11 +1815,9 @@
                         this.ctx.fillStyle = '#f43f5e';
                         this.ctx.fillRect(-lw / 2 + 5, -lh + 6, lw - 10, 8);
 
-                        // Núcleo caliente blanco
                         this.ctx.fillStyle = '#ffffff';
                         this.ctx.fillRect(-lw / 2 + 5, -lh + 9, lw - 10, 2);
 
-                        // Partícula de energía viajando por el láser
                         const sparkX = -lw / 2 + 5 + ((time * 120) % (lw - 10));
                         this.ctx.fillStyle = '#fef08a';
                         this.ctx.beginPath();
