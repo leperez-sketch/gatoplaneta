@@ -285,13 +285,14 @@
             { name: 'Rojo Carmesi', hex: '#ff0033' }
         ];
 
-        // Web Audio Synthesizer
+        // Sound Engine con música de fondo por archivo W&W.mp3
         class SoundEngine {
             constructor() {
                 this.ctx = null;
                 this.isMuted = false;
-                this.bgmTimer = null;
                 this.tempo = 140;
+                this.bgm = new Audio('W&W.mp3');
+                this.bgm.loop = true;
             }
 
             init() {
@@ -417,44 +418,23 @@
             }
 
             setBGMTempo(bpm) {
-                this.tempo = Math.min(bpm, 220);
+                this.tempo = bpm;
+                if (this.bgm) {
+                    this.bgm.playbackRate = Math.min(Math.max(bpm / 140, 0.8), 2.0);
+                }
             }
 
             startBGM() {
-                this.stopBGM();
-                let step = 0;
-                const notes = [261, 293, 329, 349, 392, 329, 293, 261];
-
-                const playStep = () => {
-                    if (this.isMuted) return;
-                    this.init();
-                    if (!this.ctx) return;
-
-                    const now = this.ctx.currentTime;
-                    const osc = this.ctx.createOscillator();
-                    const gain = this.ctx.createGain();
-                    osc.type = 'sine';
-                    osc.frequency.setValueAtTime(notes[step % notes.length], now);
-
-                    gain.gain.setValueAtTime(0.08, now);
-                    gain.gain.exponentialRampToValueAtTime(0.005, now + 0.15);
-
-                    osc.connect(gain);
-                    gain.connect(this.ctx.destination);
-                    osc.start(now);
-                    osc.stop(now + 0.15);
-
-                    step++;
-                };
-
-                const intervalMs = (60 / this.tempo) * 1000 * 0.5;
-                this.bgmTimer = setInterval(playStep, intervalMs);
+                if (this.isMuted) return;
+                this.init();
+                this.bgm.currentTime = 0;
+                this.bgm.play().catch(e => console.log('Reproducción diferida de W&W.mp3:', e));
             }
 
             stopBGM() {
-                if (this.bgmTimer) {
-                    clearInterval(this.bgmTimer);
-                    this.bgmTimer = null;
+                if (this.bgm) {
+                    this.bgm.pause();
+                    this.bgm.currentTime = 0;
                 }
             }
         }
@@ -482,7 +462,7 @@
                     speedMultiplier: 1.0,
                     blinkTimer: 0,
                     isBlinking: false,
-                    mouthOpen: 0, // 0 = closed, 1 = fully open
+                    mouthOpen: 0,
                     mouthTarget: 0,
                     purrTimer: 0
                 };
@@ -535,6 +515,11 @@
             toggleAudio() {
                 this.soundEnabled = !this.soundEnabled;
                 sound.isMuted = !this.soundEnabled;
+                if (sound.isMuted) {
+                    sound.bgm.pause();
+                } else if (this.state === 'PLAYING') {
+                    sound.bgm.play().catch(() => {});
+                }
                 document.getElementById('sound-icon').innerText = this.soundEnabled ? '🔊' : '🔇';
                 document.getElementById('sound-text').innerText = this.soundEnabled ? 'Sonido: ON' : 'Sonido: OFF';
             }
@@ -926,18 +911,16 @@
                 this.speedTimer += dt;
                 this.spawnTimer += dt;
 
-                // Animate Cat Purring & Mouth state
                 this.planet.purrTimer += dt * 5;
                 if (this.planet.mouthTarget > 0) {
                     this.planet.mouthOpen += (this.planet.mouthTarget - this.planet.mouthOpen) * 8 * dt;
                     if (Math.abs(this.planet.mouthOpen - this.planet.mouthTarget) < 0.05) {
-                        this.planet.mouthTarget = 0; // start closing
+                        this.planet.mouthTarget = 0;
                     }
                 } else {
                     this.planet.mouthOpen += (0 - this.planet.mouthOpen) * 4 * dt;
                 }
 
-                // Shooting star generator
                 this.shootingStarTimer += dt;
                 if (this.shootingStarTimer > 3.5 + Math.random() * 4) {
                     this.shootingStarTimer = 0;
@@ -951,7 +934,6 @@
                     });
                 }
 
-                // Update Shooting Stars
                 this.shootingStars.forEach(ss => {
                     ss.x += ss.vx * dt;
                     ss.y += ss.vy * dt;
@@ -959,7 +941,6 @@
                 });
                 this.shootingStars = this.shootingStars.filter(ss => ss.life > 0);
 
-                // Meow Warning at 13.5 seconds
                 if (this.speedTimer >= 13.5 && !this.meowWarningPlayed) {
                     this.meowWarningPlayed = true;
                     this.planet.mouthTarget = 1.0;
@@ -967,7 +948,6 @@
                     this.showToast('🐾 ¡MIAU! ¡La velocidad va a subir!');
                 }
 
-                // Speed increases every 15 seconds!
                 if (this.speedTimer >= 15) {
                     this.speedTimer = 0;
                     this.meowWarningPlayed = false;
@@ -1130,16 +1110,9 @@
             render() {
                 this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-                // 1. Draw Sky, Van Gogh Swirling Stars, and Water Reflections
                 this.drawBackground();
-
-                // 2. Draw Calico Cat Planet Body & Animated Features
                 this.drawCatPlanet();
-
-                // 3. Draw Obstacles
                 this.drawObstacles();
-
-                // 4. Draw Players
                 this.drawPlayers();
             }
 
@@ -1148,7 +1121,6 @@
                 const h = this.canvas.height;
                 const time = performance.now() * 0.001;
 
-                // Deep Midnight Blue Swirling Gradient (Inspired by Starry Night)
                 const skyGrad = this.ctx.createLinearGradient(0, 0, 0, h);
                 skyGrad.addColorStop(0, '#0a0d24');
                 skyGrad.addColorStop(0.4, '#12183b');
@@ -1157,14 +1129,12 @@
                 this.ctx.fillStyle = skyGrad;
                 this.ctx.fillRect(0, 0, w, h);
 
-                // Swirling Impressionist Halos and Golden Glowing Stars
                 this.stars.forEach(s => {
                     const sx = s.x * w;
                     const sy = s.y * h;
                     const twinkle = Math.sin(time * s.twinkleSpeed + s.twinkleOffset);
                     const alpha = 0.6 + 0.4 * twinkle;
 
-                    // Concentric Brushstroke Swirling Halos
                     this.ctx.save();
                     this.ctx.globalAlpha = alpha * 0.45;
                     this.ctx.strokeStyle = s.color;
@@ -1180,7 +1150,6 @@
                     this.ctx.stroke();
                     this.ctx.restore();
 
-                    // Bright Star Core
                     const coreGrad = this.ctx.createRadialGradient(sx, sy, 0, sx, sy, s.radius * 2);
                     coreGrad.addColorStop(0, '#ffffff');
                     coreGrad.addColorStop(0.5, s.color);
@@ -1192,7 +1161,6 @@
                     this.ctx.fill();
                 });
 
-                // Shooting Stars (Estrellas Fugaces)
                 this.shootingStars.forEach(ss => {
                     this.ctx.save();
                     this.ctx.globalAlpha = ss.life;
@@ -1209,7 +1177,6 @@
                     this.ctx.lineTo(ss.x - ss.length, ss.y - ss.length * 0.5);
                     this.ctx.stroke();
 
-                    // Bright head spark
                     this.ctx.fillStyle = '#ffffff';
                     this.ctx.beginPath();
                     this.ctx.arc(ss.x, ss.y, 3, 0, Math.PI * 2);
@@ -1217,7 +1184,6 @@
                     this.ctx.restore();
                 });
 
-                // Shimmering Horizon Water Light Reflections (Inspired by Starry Night Over the Rhône)
                 const horizonY = h * 0.88;
                 this.ctx.save();
                 this.ctx.fillStyle = 'rgba(10, 15, 38, 0.7)';
@@ -1252,56 +1218,58 @@
                     }
                 }
 
-                // Smooth Pupil Motion Tracking
                 const pupilOffsetX = Math.sin(time * 1.5) * 8;
                 const pupilOffsetY = Math.cos(time * 2.1) * 5;
 
-                // 1. EAR STRUCTURES (Calico dark charcoal & ginger)
-                this.drawCatEar(-p.radius * 0.52, -p.radius * 0.84, -0.28, '#242021', '#f2a4ad');
-                this.drawCatEar(p.radius * 0.52, -p.radius * 0.84, 0.28, '#d96e28', '#f2a4ad');
+                // 1. PATAS LEVANTADAS (PAWS) - Dibuja las patas alzadas a ambos lados (según bosquejo en rojo)
+                this.drawCatPaws();
 
-                // 2. MAIN PLANET SPHERE (Calico Cream Base)
+                // 2. OREJAS MEJORADAS Y MÁS GRANDES
+                this.drawCatEar(-p.radius * 0.55, -p.radius * 0.82, -0.32, '#242021', '#f2a4ad');
+                this.drawCatEar(p.radius * 0.55, -p.radius * 0.82, 0.32, '#d96e28', '#f2a4ad');
+
+                // 3. PLANETA BASE (CUERPO DEL GATO CREMA CALICO)
                 this.ctx.beginPath();
                 this.ctx.arc(0, 0, p.radius, 0, Math.PI * 2);
                 this.ctx.fillStyle = '#fbf7ee';
                 this.ctx.fill();
 
-                // 3. CALICO FUR PATCHES (Dark Charcoal & Warm Ginger Patches)
+                // 4. MANCHAS CAREY (MANCHAS NEGRAS Y NARANJAS EN EL PELAJE)
                 this.ctx.save();
-                this.ctx.clip(); // Clip patches to sphere boundary
+                this.ctx.clip();
 
-                // Left Dark Patch
+                // Mancha Izquierda Negra
                 this.ctx.fillStyle = '#242021';
                 this.ctx.beginPath();
                 this.ctx.ellipse(-p.radius * 0.65, -p.radius * 0.45, p.radius * 0.55, p.radius * 0.6, 0.4, 0, Math.PI * 2);
                 this.ctx.fill();
 
-                // Right Ginger Patch
+                // Mancha Derecha Naranja
                 this.ctx.fillStyle = '#d96e28';
                 this.ctx.beginPath();
                 this.ctx.ellipse(p.radius * 0.68, -p.radius * 0.35, p.radius * 0.52, p.radius * 0.55, -0.35, 0, Math.PI * 2);
                 this.ctx.fill();
 
-                // Top Forehead Calico Patch
+                // Mancha Superior Frente
                 this.ctx.fillStyle = '#c2571a';
                 this.ctx.beginPath();
                 this.ctx.ellipse(0, -p.radius * 0.88, p.radius * 0.28, p.radius * 0.22, 0, 0, Math.PI * 2);
                 this.ctx.fill();
                 this.ctx.restore();
 
-                // Planet Outline Contour
+                // Borde del Planeta
                 this.ctx.lineWidth = 5;
                 this.ctx.strokeStyle = '#1e1b18';
                 this.ctx.stroke();
 
-                // 4. CALICO CAT FACE FEATURES
+                // 5. DETALLES DE LA CARA
                 const faceY = -p.radius * 0.42;
 
-                // Glossy Expressive Eyes (Hazelly-Green Calico Eyes)
+                // Ojos brillantes
                 this.drawRealisticCatEye(-p.radius * 0.28, faceY, p.isBlinking, pupilOffsetX, pupilOffsetY);
                 this.drawRealisticCatEye(p.radius * 0.28, faceY, p.isBlinking, pupilOffsetX, pupilOffsetY);
 
-                // Cute Pink Nose
+                // Nariz Rosada
                 const noseY = faceY + 42;
                 this.ctx.fillStyle = '#e26a7a';
                 this.ctx.beginPath();
@@ -1314,21 +1282,21 @@
                 this.ctx.strokeStyle = '#8c3541';
                 this.ctx.stroke();
 
-                // Nostril accents
+                // Orificios de la nariz
                 this.ctx.fillStyle = '#8c3541';
                 this.ctx.beginPath();
                 this.ctx.arc(-5, noseY + 4, 2, 0, Math.PI * 2);
                 this.ctx.arc(5, noseY + 4, 2, 0, Math.PI * 2);
                 this.ctx.fill();
 
-                // 5. ANIMATED CAT MOUTH & TONGUE
+                // Boca animada
                 this.drawAnimatedMouth(0, noseY + 12, p.mouthOpen, Math.sin(p.purrTimer) * 1.5);
 
-                // Whisker Tufts & Whiskers
+                // Bigotes
                 this.drawWhiskers(-p.radius * 0.32, noseY + 14, true);
                 this.drawWhiskers(p.radius * 0.32, noseY + 14, false);
 
-                // Rosy Blush Cheeks
+                // Mejillas rosadas
                 this.ctx.fillStyle = 'rgba(244, 114, 182, 0.35)';
                 this.ctx.beginPath();
                 this.ctx.ellipse(-p.radius * 0.48, noseY + 12, 22, 14, 0, 0, Math.PI * 2);
@@ -1338,42 +1306,115 @@
                 this.ctx.restore();
             }
 
+            drawCatPaws() {
+                const p = this.planet;
+                const time = performance.now() * 0.001;
+                const waveLeft = Math.sin(time * 2) * 8;
+                const waveRight = Math.cos(time * 2) * 8;
+
+                // Pata Izquierda (Negra con almohadillas rosadas)
+                this.ctx.save();
+                this.ctx.translate(-p.radius * 1.08, -p.radius * 0.05 + waveLeft);
+                this.ctx.rotate(-0.25);
+
+                this.ctx.fillStyle = '#242021';
+                this.ctx.strokeStyle = '#1e1b18';
+                this.ctx.lineWidth = 5;
+
+                this.ctx.beginPath();
+                this.ctx.moveTo(-48, 220);
+                this.ctx.lineTo(-42, -40);
+                this.ctx.arc(-30, -70, 22, Math.PI, Math.PI * 1.5);
+                this.ctx.arc(0, -92, 24, Math.PI * 1.2, Math.PI * 1.8);
+                this.ctx.arc(32, -68, 22, Math.PI * 1.5, 0);
+                this.ctx.lineTo(48, 220);
+                this.ctx.closePath();
+                this.ctx.fill();
+                this.ctx.stroke();
+
+                // Huellitas rosadas
+                this.ctx.fillStyle = '#f2a4ad';
+                this.ctx.beginPath();
+                this.ctx.ellipse(0, -25, 22, 18, 0, 0, Math.PI * 2);
+                this.ctx.fill();
+
+                this.ctx.beginPath();
+                this.ctx.arc(-28, -62, 9, 0, Math.PI * 2);
+                this.ctx.arc(0, -80, 10, 0, Math.PI * 2);
+                this.ctx.arc(28, -60, 9, 0, Math.PI * 2);
+                this.ctx.fill();
+                this.ctx.restore();
+
+                // Pata Derecha (Naranja con almohadillas rosadas)
+                this.ctx.save();
+                this.ctx.translate(p.radius * 1.08, -p.radius * 0.05 + waveRight);
+                this.ctx.rotate(0.25);
+
+                this.ctx.fillStyle = '#d96e28';
+                this.ctx.strokeStyle = '#1e1b18';
+                this.ctx.lineWidth = 5;
+
+                this.ctx.beginPath();
+                this.ctx.moveTo(-48, 220);
+                this.ctx.lineTo(-32, -68);
+                this.ctx.arc(-28, -68, 22, Math.PI, Math.PI * 1.5);
+                this.ctx.arc(0, -92, 24, Math.PI * 1.2, Math.PI * 1.8);
+                this.ctx.arc(30, -70, 22, Math.PI * 1.5, 0);
+                this.ctx.lineTo(48, 220);
+                this.ctx.closePath();
+                this.ctx.fill();
+                this.ctx.stroke();
+
+                // Huellitas rosadas
+                this.ctx.fillStyle = '#f2a4ad';
+                this.ctx.beginPath();
+                this.ctx.ellipse(0, -25, 22, 18, 0, 0, Math.PI * 2);
+                this.ctx.fill();
+
+                this.ctx.beginPath();
+                this.ctx.arc(-28, -60, 9, 0, Math.PI * 2);
+                this.ctx.arc(0, -80, 10, 0, Math.PI * 2);
+                this.ctx.arc(28, -62, 9, 0, Math.PI * 2);
+                this.ctx.fill();
+                this.ctx.restore();
+            }
+
             drawCatEar(x, y, rotation, outerColor, innerColor) {
                 this.ctx.save();
                 this.ctx.translate(x, y);
                 this.ctx.rotate(rotation);
 
-                // Outer Ear
+                // Oreja exterior más amplia y apuntada
                 this.ctx.fillStyle = outerColor;
                 this.ctx.beginPath();
-                this.ctx.moveTo(0, -95);
-                this.ctx.lineTo(-45, 20);
-                this.ctx.lineTo(45, 20);
+                this.ctx.moveTo(0, -135);
+                this.ctx.lineTo(-60, 30);
+                this.ctx.lineTo(60, 30);
                 this.ctx.closePath();
                 this.ctx.fill();
-                this.ctx.lineWidth = 4;
+                this.ctx.lineWidth = 5;
                 this.ctx.strokeStyle = '#1e1b18';
                 this.ctx.stroke();
 
-                // Inner Pink Ear
+                // Oreja interior rosada
                 this.ctx.fillStyle = innerColor;
                 this.ctx.beginPath();
-                this.ctx.moveTo(0, -75);
-                this.ctx.lineTo(-28, 12);
-                this.ctx.lineTo(28, 12);
+                this.ctx.moveTo(0, -110);
+                this.ctx.lineTo(-40, 20);
+                this.ctx.lineTo(40, 20);
                 this.ctx.closePath();
                 this.ctx.fill();
 
-                // Ear Hair Tufts
+                // Pelos internos
                 this.ctx.strokeStyle = '#ffffff';
-                this.ctx.lineWidth = 2;
+                this.ctx.lineWidth = 2.5;
                 this.ctx.beginPath();
-                this.ctx.moveTo(-15, 10);
-                this.ctx.lineTo(-5, -20);
-                this.ctx.moveTo(0, 12);
-                this.ctx.lineTo(5, -25);
-                this.ctx.moveTo(15, 10);
-                this.ctx.lineTo(12, -15);
+                this.ctx.moveTo(-20, 15);
+                this.ctx.lineTo(-8, -28);
+                this.ctx.moveTo(0, 18);
+                this.ctx.lineTo(6, -35);
+                this.ctx.moveTo(20, 15);
+                this.ctx.lineTo(16, -22);
                 this.ctx.stroke();
 
                 this.ctx.restore();
@@ -1391,17 +1432,15 @@
                     this.ctx.arc(0, 0, 38, 0.2 * Math.PI, 0.8 * Math.PI);
                     this.ctx.stroke();
                 } else {
-                    // Eye Socket Background
                     this.ctx.beginPath();
                     this.ctx.ellipse(0, 0, 42, 54, 0, 0, Math.PI * 2);
                     this.ctx.fillStyle = '#1e1b18';
                     this.ctx.fill();
 
-                    // Rich Hazel/Amber Iris Gradient
                     const irisGrad = this.ctx.createRadialGradient(0, 0, 5, 0, 0, 42);
-                    irisGrad.addColorStop(0, '#facc15'); // Bright amber inner
-                    irisGrad.addColorStop(0.5, '#84cc16'); // Vibrant hazel green
-                    irisGrad.addColorStop(0.95, '#3f6212'); // Deep forest edge
+                    irisGrad.addColorStop(0, '#facc15');
+                    irisGrad.addColorStop(0.5, '#84cc16');
+                    irisGrad.addColorStop(0.95, '#3f6212');
                     irisGrad.addColorStop(1, '#1e1b18');
 
                     this.ctx.beginPath();
@@ -1409,13 +1448,11 @@
                     this.ctx.fillStyle = irisGrad;
                     this.ctx.fill();
 
-                    // Slit Pupil with Tracking
                     this.ctx.fillStyle = '#0f172a';
                     this.ctx.beginPath();
                     this.ctx.ellipse(pupilX, pupilY, 12, 42, 0, 0, Math.PI * 2);
                     this.ctx.fill();
 
-                    // Double Glossy Specular Highlights (As seen in calico reference photo)
                     this.ctx.fillStyle = '#ffffff';
                     this.ctx.beginPath();
                     this.ctx.arc(-12 + pupilX, -18 + pupilY, 11, 0, Math.PI * 2);
@@ -1437,7 +1474,6 @@
                 this.ctx.strokeStyle = '#1e1b18';
 
                 if (mouthOpenFactor > 0.1) {
-                    // Open Meowing Mouth
                     const mouthHeight = 18 * mouthOpenFactor;
 
                     this.ctx.fillStyle = '#5c1d24';
@@ -1449,13 +1485,11 @@
                     this.ctx.fill();
                     this.ctx.stroke();
 
-                    // Pink Tongue
                     this.ctx.fillStyle = '#f472b6';
                     this.ctx.beginPath();
                     this.ctx.ellipse(0, mouthHeight * 0.8, 10, 7 * mouthOpenFactor, 0, 0, Math.PI * 2);
                     this.ctx.fill();
                 } else {
-                    // Cute Closed Cat Smile / Muzzle W-Curve
                     this.ctx.beginPath();
                     this.ctx.arc(-12, 0, 12, 0.15 * Math.PI, 0.85 * Math.PI);
                     this.ctx.arc(12, 0, 12, 0.15 * Math.PI, 0.85 * Math.PI);
@@ -1463,14 +1497,6 @@
                 }
 
                 this.ctx.restore();
-            }
-
-            drawStripeArc(x, y, radius, isLeft) {
-                this.ctx.beginPath();
-                this.ctx.arc(x, y, radius, isLeft ? -0.4 : Math.PI - 0.4, isLeft ? 0.4 : Math.PI + 0.4);
-                this.ctx.lineWidth = 14;
-                this.ctx.strokeStyle = '#9E0022';
-                this.ctx.stroke();
             }
 
             drawWhiskers(x, y, isLeft) {
@@ -1484,47 +1510,6 @@
                     this.ctx.lineTo(x + dir * 65, y + i * 16 - 8);
                     this.ctx.stroke();
                 }
-            }
-
-            drawHeart(x, y, size) {
-                this.ctx.save();
-                this.ctx.translate(x, y);
-                this.ctx.fillStyle = '#ff0033';
-                this.ctx.beginPath();
-                this.ctx.moveTo(0, 0);
-                this.ctx.bezierCurveTo(-size / 2, -size / 2, -size, size / 3, 0, size);
-                this.ctx.bezierCurveTo(size, size / 3, size / 2, -size / 2, 0, 0);
-                this.ctx.fill();
-                this.ctx.restore();
-            }
-
-            drawCatEye(x, y, isBlinking, pupilX, pupilY) {
-                this.ctx.save();
-                this.ctx.translate(x, y);
-
-                if (isBlinking) {
-                    this.ctx.lineWidth = 5;
-                    this.ctx.strokeStyle = '#000000';
-                    this.ctx.beginPath();
-                    this.ctx.arc(0, 0, 32, 0.2 * Math.PI, 0.8 * Math.PI);
-                    this.ctx.stroke();
-                } else {
-                    this.ctx.beginPath();
-                    this.ctx.ellipse(0, 0, 34, 48, 0, 0, Math.PI * 2);
-                    this.ctx.fillStyle = '#000000';
-                    this.ctx.fill();
-                    this.ctx.lineWidth = 3;
-                    this.ctx.strokeStyle = '#ffffff';
-                    this.ctx.stroke();
-
-                    this.ctx.fillStyle = '#ffffff';
-                    this.ctx.beginPath();
-                    this.ctx.arc(-8 + pupilX, -14 + pupilY, 11, 0, Math.PI * 2);
-                    this.ctx.arc(8 + pupilX, 12 + pupilY, 6, 0, Math.PI * 2);
-                    this.ctx.fill();
-                }
-
-                this.ctx.restore();
             }
 
             drawObstacles() {
@@ -1625,51 +1610,54 @@
                 });
             }
 
+            // Dibujo de personaje incrementado en un 30% (+30%)
             drawStickman(player) {
+                const scale = 1.3; // Factor de escala +30%
+
                 this.ctx.strokeStyle = player.color;
-                this.ctx.lineWidth = 3.5;
+                this.ctx.lineWidth = 4.5;
                 this.ctx.lineCap = 'round';
 
                 const isJumping = !player.isGrounded;
 
-                // Head Circle
+                // Cabeza
                 this.ctx.beginPath();
-                this.ctx.arc(0, -42, 9, 0, Math.PI * 2);
+                this.ctx.arc(0, -42 * scale, 9 * scale, 0, Math.PI * 2);
                 this.ctx.fillStyle = '#ffffff';
                 this.ctx.fill();
                 this.ctx.stroke();
 
-                // Torso Line
+                // Torso
                 this.ctx.beginPath();
-                this.ctx.moveTo(0, -33);
-                this.ctx.lineTo(0, -15);
+                this.ctx.moveTo(0, -33 * scale);
+                this.ctx.lineTo(0, -15 * scale);
                 this.ctx.stroke();
 
                 if (isJumping) {
                     this.ctx.beginPath();
-                    this.ctx.moveTo(0, -28);
-                    this.ctx.lineTo(-12, -40);
-                    this.ctx.moveTo(0, -28);
-                    this.ctx.lineTo(12, -40);
+                    this.ctx.moveTo(0, -28 * scale);
+                    this.ctx.lineTo(-12 * scale, -40 * scale);
+                    this.ctx.moveTo(0, -28 * scale);
+                    this.ctx.lineTo(12 * scale, -40 * scale);
                     this.ctx.stroke();
 
                     this.ctx.beginPath();
-                    this.ctx.moveTo(0, -15);
-                    this.ctx.lineTo(-10, -5);
-                    this.ctx.moveTo(0, -15);
-                    this.ctx.lineTo(10, -5);
+                    this.ctx.moveTo(0, -15 * scale);
+                    this.ctx.lineTo(-10 * scale, -5 * scale);
+                    this.ctx.moveTo(0, -15 * scale);
+                    this.ctx.lineTo(10 * scale, -5 * scale);
                     this.ctx.stroke();
                 } else {
                     this.ctx.beginPath();
-                    this.ctx.moveTo(0, -28);
-                    this.ctx.lineTo(-10, -18);
-                    this.ctx.moveTo(0, -28);
-                    this.ctx.lineTo(10, -18);
+                    this.ctx.moveTo(0, -28 * scale);
+                    this.ctx.lineTo(-10 * scale, -18 * scale);
+                    this.ctx.moveTo(0, -28 * scale);
+                    this.ctx.lineTo(10 * scale, -18 * scale);
 
-                    this.ctx.moveTo(0, -15);
-                    this.ctx.lineTo(-8, 0);
-                    this.ctx.moveTo(0, -15);
-                    this.ctx.lineTo(8, 0);
+                    this.ctx.moveTo(0, -15 * scale);
+                    this.ctx.lineTo(-8 * scale, 0);
+                    this.ctx.moveTo(0, -15 * scale);
+                    this.ctx.lineTo(8 * scale, 0);
                     this.ctx.stroke();
                 }
 
@@ -1679,30 +1667,39 @@
                     this.ctx.lineWidth = 1.5;
                     this.ctx.beginPath();
                     if (this.ctx.roundRect) {
-                        this.ctx.roundRect(-24, -68, 48, 20, 6);
+                        this.ctx.roundRect(-28 * scale, -72 * scale, 56 * scale, 24 * scale, 6);
                     } else {
-                        this.ctx.rect(-24, -68, 48, 20);
+                        this.ctx.rect(-28 * scale, -72 * scale, 56 * scale, 24 * scale);
                     }
                     this.ctx.fill();
                     this.ctx.stroke();
 
                     this.ctx.fillStyle = '#e11d48';
-                    this.ctx.font = 'bold 10px sans-serif';
+                    this.ctx.font = 'bold 13px sans-serif';
                     this.ctx.textAlign = 'center';
-                    this.ctx.fillText('🐾 MEOW!', 0, -54);
+                    this.ctx.fillText('🐾 MEOW!', 0, -56 * scale);
                 }
             }
 
+            // Dibujo de Nameplate incrementado en un 40% (+40%)
             drawNameplate(player) {
-                this.ctx.font = 'bold 11px sans-serif';
+                // Tamaño de fuente 15px (+40% de 11px)
+                this.ctx.font = 'bold 15px sans-serif';
                 const textWidth = this.ctx.measureText(player.name).width;
 
-                this.ctx.fillStyle = 'rgba(15, 23, 42, 0.8)';
-                this.ctx.fillRect(-textWidth / 2 - 6, -82, textWidth + 12, 16);
+                const plateY = -92;
+                const plateWidth = textWidth + 18;
+                const plateHeight = 22;
+
+                this.ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+                this.ctx.fillRect(-plateWidth / 2, plateY - plateHeight + 4, plateWidth, plateHeight);
+                this.ctx.strokeStyle = player.color;
+                this.ctx.lineWidth = 1.5;
+                this.ctx.strokeRect(-plateWidth / 2, plateY - plateHeight + 4, plateWidth, plateHeight);
 
                 this.ctx.fillStyle = player.color;
                 this.ctx.textAlign = 'center';
-                this.ctx.fillText(player.name, 0, -70);
+                this.ctx.fillText(player.name, 0, plateY - 2);
             }
 
             loop(now) {
