@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Gato Planeta - Battle Royale</title>
+    <title>Gato Planeta Calicó - Battle Royale</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- PeerJS for WebRTC P2P multiplayer -->
@@ -16,13 +16,18 @@
     <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Press+Start+2P&display=swap" rel="stylesheet">
     
     <style>
-        body {
-            font-family: 'Fredoka', sans-serif;
-            background-color: #0f172a;
-            color: #ffffff;
-            overflow: hidden;
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
             user-select: none;
             -webkit-user-select: none;
+        }
+        body {
+            font-family: 'Fredoka', sans-serif;
+            background-color: #0b0c1b;
+            color: #ffffff;
+            overflow: hidden;
             touch-action: manipulation;
         }
         .font-pixel {
@@ -68,7 +73,7 @@
         }
     </style>
 </head>
-<body class="h-screen w-screen flex flex-col justify-between items-center relative overflow-hidden bg-slate-900">
+<body class="h-screen w-screen flex flex-col justify-between items-center relative overflow-hidden bg-slate-950">
 
     <!-- MAIN CANVAS GAME VIEW (HOST VIEW) -->
     <div id="host-view" class="relative w-full h-full flex flex-col items-center justify-center">
@@ -76,7 +81,7 @@
         <header class="absolute top-0 left-0 right-0 z-20 flex justify-between items-center px-4 py-3 bg-slate-900/80 backdrop-blur-md border-b border-slate-700/50">
             <div class="flex items-center space-x-3">
                 <span class="text-2xl">🐱🪐</span>
-                <h1 class="text-xl md:text-2xl font-bold tracking-wide text-yellow-400">GATO PLANETA <span class="text-xs px-2 py-0.5 bg-yellow-500/20 text-yellow-300 rounded-full border border-yellow-500/40">BATTLE ROYALE</span></h1>
+                <h1 class="text-xl md:text-2xl font-bold tracking-wide text-yellow-400">GATO PLANETA <span class="text-xs px-2 py-0.5 bg-yellow-500/20 text-yellow-300 rounded-full border border-yellow-500/40">CALICÓ RUNNER</span></h1>
             </div>
             <div id="host-header-status" class="flex items-center space-x-4">
                 <div class="hidden sm:flex items-center space-x-2 bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700 text-sm">
@@ -159,7 +164,7 @@
             </div>
         </div>
 
-        <!-- TRANSITION SCREEN OVERLAY ("MEOWWWW!!") -->
+        <!-- TRANSITION SCREEN OVERLAY -->
         <div id="meow-transition-overlay" class="hidden absolute inset-0 z-40 bg-slate-950/95 flex flex-col items-center justify-center p-4">
             <div class="text-center space-y-6">
                 <h2 class="meow-text text-6xl md:text-8xl font-black tracking-widest uppercase filter drop-shadow-2xl">
@@ -169,7 +174,7 @@
                     3
                 </div>
                 <p class="text-xl md:text-2xl text-pink-300 font-bold tracking-wider">
-                    🐱 ¡Prepárate para saltar sobre el Gato Planeta! 🪐
+                    🐱 ¡Prepárate para saltar sobre el Gato Planeta Calicó! 🪐
                 </p>
             </div>
         </div>
@@ -212,7 +217,7 @@
                 <div id="winner-name-display" class="text-3xl font-black text-pink-400 py-2 bg-slate-800/80 rounded-xl border border-pink-500/30">
                     --
                 </div>
-                <p class="text-xs text-slate-300">¡Sobrevivió a la furia rotatoria del Gato Planeta!</p>
+                <p class="text-xs text-slate-300">¡Sobrevivió a la furia rotatoria del Gato Planeta Calicó!</p>
                 <div class="flex gap-3 pt-2">
                     <button onclick="game.resetMatchToLobby()" class="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-bold rounded-xl border border-slate-700 transition">
                         🏠 Volver al Lobby
@@ -225,7 +230,7 @@
         </div>
     </div>
 
-    <!-- MOBILE CONTROLLER VIEW (CLIENT / PHONE MODE) -->
+    <!-- MOBILE CONTROLLER VIEW -->
     <div id="controller-view" class="hidden fixed inset-0 z-50 bg-slate-950 flex flex-col justify-between p-4 touch-none select-none">
         <header class="flex justify-between items-center bg-slate-900 p-3 rounded-xl border border-slate-800">
             <div class="flex items-center space-x-2">
@@ -249,7 +254,7 @@
             </div>
 
             <div class="space-y-1 text-left">
-                <label class="text-xs text-slate-400">Color de tu Monigote:</label>
+                <label class="text-xs text-slate-400">Color de tu Monigote Calicó:</label>
                 <div id="controller-color-picker" class="flex justify-between gap-1 pt-1">
                 </div>
             </div>
@@ -273,7 +278,7 @@
     </div>
 
     <script>
-        // Color Palette definitions
+        // Palette definitions
         const PLAYER_COLORS = [
             { name: 'Rosa Neon', hex: '#ff007f' },
             { name: 'Cian Electrito', hex: '#00f0ff' },
@@ -285,7 +290,7 @@
             { name: 'Rojo Carmesi', hex: '#ff0033' }
         ];
 
-        // Sound Engine con música de fondo (W&W.mp3) y efecto de maullido (120.mp3)
+        // Sound Engine
         class SoundEngine {
             constructor() {
                 this.ctx = null;
@@ -293,7 +298,7 @@
                 this.tempo = 140;
                 this.bgm = new Audio('W&W.mp3');
                 this.bgm.loop = true;
-                this.meowAudio = new Audio('120.mp3'); // Archivo mp3 para el sonido de miau
+                this.meowAudio = new Audio('120.mp3');
             }
 
             init() {
@@ -328,7 +333,6 @@
                 osc.stop(now + 0.15);
             }
 
-            // REEMPLAZADO: Reproduce el archivo 120.mp3 mediante clonación para permitir solapamiento
             playMeow() {
                 if (this.isMuted) return;
                 this.init();
@@ -1194,6 +1198,7 @@
                 this.ctx.restore();
             }
 
+            // PLANETA RE-DISEÑADO ESTILO CALICÓ (GEMINI-CODE-1790211250591)
             drawCatPlanet() {
                 const p = this.planet;
                 const time = performance.now() * 0.001;
@@ -1214,45 +1219,72 @@
                 const pupilOffsetX = Math.sin(time * 1.5) * 8;
                 const pupilOffsetY = Math.cos(time * 2.1) * 5;
 
-                this.drawCatPaws();
-                this.drawCatEar(-p.radius * 0.55, -p.radius * 0.82, -0.32, '#242021', '#f2a4ad');
-                this.drawCatEar(p.radius * 0.55, -p.radius * 0.82, 0.32, '#d96e28', '#f2a4ad');
+                // 1. OREJAS GIGANTES CALICÓ ARTICULADAS
+                const earBounce = Math.sin(time * 6) * 6;
+                this.drawGiantEar(-p.radius * 0.55, -p.radius * 0.82 + earBounce, -0.22, true);
+                this.drawGiantEar(p.radius * 0.55, -p.radius * 0.82 + earBounce, 0.22, false);
 
+                // 2. CUERPO ESFÉRICO CON MANCHAS TRICOLOR CALICÓ
+                this.ctx.save();
                 this.ctx.beginPath();
                 this.ctx.arc(0, 0, p.radius, 0, Math.PI * 2);
-                this.ctx.fillStyle = '#fbf7ee';
-                this.ctx.fill();
-
-                this.ctx.save();
                 this.ctx.clip();
 
-                this.ctx.fillStyle = '#242021';
+                // Parche Izquierdo (Negro azabache)
+                const gradBlack = this.ctx.createRadialGradient(-p.radius * 0.5, -p.radius * 0.3, 10, -p.radius * 0.4, 0, p.radius * 1.2);
+                gradBlack.addColorStop(0, '#3a3a42');
+                gradBlack.addColorStop(1, '#111114');
+                this.ctx.fillStyle = gradBlack;
                 this.ctx.beginPath();
-                this.ctx.ellipse(-p.radius * 0.65, -p.radius * 0.45, p.radius * 0.55, p.radius * 0.6, 0.4, 0, Math.PI * 2);
+                this.ctx.arc(-p.radius * 0.45, 0, p.radius * 0.9, 0, Math.PI * 2);
                 this.ctx.fill();
 
-                this.ctx.fillStyle = '#d96e28';
+                // Parche Derecho (Naranja cálido)
+                const gradOrange = this.ctx.createRadialGradient(p.radius * 0.5, -p.radius * 0.3, 10, p.radius * 0.4, 0, p.radius * 1.2);
+                gradOrange.addColorStop(0, '#ff8a36');
+                gradOrange.addColorStop(1, '#aa4002');
+                this.ctx.fillStyle = gradOrange;
                 this.ctx.beginPath();
-                this.ctx.ellipse(p.radius * 0.68, -p.radius * 0.35, p.radius * 0.52, p.radius * 0.55, -0.35, 0, Math.PI * 2);
+                this.ctx.arc(p.radius * 0.45, 0, p.radius * 0.9, 0, Math.PI * 2);
                 this.ctx.fill();
 
-                this.ctx.fillStyle = '#c2571a';
+                // Parche Central (Blanco crema)
+                const gradCream = this.ctx.createLinearGradient(-p.radius * 0.2, 0, p.radius * 0.2, 0);
+                gradCream.addColorStop(0, '#fff6ed');
+                gradCream.addColorStop(0.5, '#ffffff');
+                gradCream.addColorStop(1, '#fff6ed');
+                this.ctx.fillStyle = gradCream;
                 this.ctx.beginPath();
-                this.ctx.ellipse(0, -p.radius * 0.88, p.radius * 0.28, p.radius * 0.22, 0, 0, Math.PI * 2);
+                this.ctx.ellipse(0, -p.radius * 0.1, p.radius * 0.4, p.radius * 0.95, 0, 0, Math.PI * 2);
                 this.ctx.fill();
+
+                // Sombra de volumen 3D
+                const volumeShadow = this.ctx.createRadialGradient(0, p.radius * 0.1, p.radius * 0.4, 0, 0, p.radius);
+                volumeShadow.addColorStop(0, 'rgba(0,0,0,0)');
+                volumeShadow.addColorStop(0.8, 'rgba(0,0,0,0.15)');
+                volumeShadow.addColorStop(1, 'rgba(0,0,0,0.55)');
+                this.ctx.fillStyle = volumeShadow;
+                this.ctx.beginPath();
+                this.ctx.arc(0, 0, p.radius, 0, Math.PI * 2);
+                this.ctx.fill();
+
                 this.ctx.restore();
 
+                // Contorno principal del Planeta
+                this.ctx.beginPath();
+                this.ctx.arc(0, 0, p.radius, 0, Math.PI * 2);
                 this.ctx.lineWidth = 5;
-                this.ctx.strokeStyle = '#1e1b18';
+                this.ctx.strokeStyle = '#0f0f14';
                 this.ctx.stroke();
 
+                // 3. DETALLES FACIALES CALICÓ
                 const faceY = -p.radius * 0.42;
 
-                this.drawRealisticCatEye(-p.radius * 0.28, faceY, p.isBlinking, pupilOffsetX, pupilOffsetY);
-                this.drawRealisticCatEye(p.radius * 0.28, faceY, p.isBlinking, pupilOffsetX, pupilOffsetY);
+                this.drawStylizedEye(-p.radius * 0.28, faceY, p.isBlinking, pupilOffsetX, pupilOffsetY);
+                this.drawStylizedEye(p.radius * 0.28, faceY, p.isBlinking, pupilOffsetX, pupilOffsetY);
 
                 const noseY = faceY + 42;
-                this.ctx.fillStyle = '#e26a7a';
+                this.ctx.fillStyle = '#ff6b8b';
                 this.ctx.beginPath();
                 this.ctx.moveTo(0, noseY + 10);
                 this.ctx.lineTo(-14, noseY - 6);
@@ -1263,18 +1295,13 @@
                 this.ctx.strokeStyle = '#8c3541';
                 this.ctx.stroke();
 
-                this.ctx.fillStyle = '#8c3541';
-                this.ctx.beginPath();
-                this.ctx.arc(-5, noseY + 4, 2, 0, Math.PI * 2);
-                this.ctx.arc(5, noseY + 4, 2, 0, Math.PI * 2);
-                this.ctx.fill();
-
                 this.drawAnimatedMouth(0, noseY + 12, p.mouthOpen, Math.sin(p.purrTimer) * 1.5);
 
                 this.drawWhiskers(-p.radius * 0.32, noseY + 14, true);
                 this.drawWhiskers(p.radius * 0.32, noseY + 14, false);
 
-                this.ctx.fillStyle = 'rgba(244, 114, 182, 0.35)';
+                // Rubor facial
+                this.ctx.fillStyle = 'rgba(255, 105, 180, 0.35)';
                 this.ctx.beginPath();
                 this.ctx.ellipse(-p.radius * 0.48, noseY + 12, 22, 14, 0, 0, Math.PI * 2);
                 this.ctx.ellipse(p.radius * 0.48, noseY + 12, 22, 14, 0, 0, Math.PI * 2);
@@ -1283,153 +1310,80 @@
                 this.ctx.restore();
             }
 
-            drawCatPaws() {
-                const p = this.planet;
-                const time = performance.now() * 0.001;
-                const waveLeft = Math.sin(time * 2) * 8;
-                const waveRight = Math.cos(time * 2) * 8;
-
-                this.ctx.save();
-                this.ctx.translate(-p.radius * 1.08, -p.radius * 0.05 + waveLeft);
-                this.ctx.rotate(-0.25);
-
-                this.ctx.fillStyle = '#242021';
-                this.ctx.strokeStyle = '#1e1b18';
-                this.ctx.lineWidth = 5;
-
-                this.ctx.beginPath();
-                this.ctx.moveTo(-48, 220);
-                this.ctx.lineTo(-42, -40);
-                this.ctx.arc(-30, -70, 22, Math.PI, Math.PI * 1.5);
-                this.ctx.arc(0, -92, 24, Math.PI * 1.2, Math.PI * 1.8);
-                this.ctx.arc(32, -68, 22, Math.PI * 1.5, 0);
-                this.ctx.lineTo(48, 220);
-                this.ctx.closePath();
-                this.ctx.fill();
-                this.ctx.stroke();
-
-                this.ctx.fillStyle = '#f2a4ad';
-                this.ctx.beginPath();
-                this.ctx.ellipse(0, -25, 22, 18, 0, 0, Math.PI * 2);
-                this.ctx.fill();
-
-                this.ctx.beginPath();
-                this.ctx.arc(-28, -62, 9, 0, Math.PI * 2);
-                this.ctx.arc(0, -80, 10, 0, Math.PI * 2);
-                this.ctx.arc(28, -60, 9, 0, Math.PI * 2);
-                this.ctx.fill();
-                this.ctx.restore();
-
-                this.ctx.save();
-                this.ctx.translate(p.radius * 1.08, -p.radius * 0.05 + waveRight);
-                this.ctx.rotate(0.25);
-
-                this.ctx.fillStyle = '#d96e28';
-                this.ctx.strokeStyle = '#1e1b18';
-                this.ctx.lineWidth = 5;
-
-                this.ctx.beginPath();
-                this.ctx.moveTo(-48, 220);
-                this.ctx.lineTo(-32, -68);
-                this.ctx.arc(-28, -68, 22, Math.PI, Math.PI * 1.5);
-                this.ctx.arc(0, -92, 24, Math.PI * 1.2, Math.PI * 1.8);
-                this.ctx.arc(30, -70, 22, Math.PI * 1.5, 0);
-                this.ctx.lineTo(48, 220);
-                this.ctx.closePath();
-                this.ctx.fill();
-                this.ctx.stroke();
-
-                this.ctx.fillStyle = '#f2a4ad';
-                this.ctx.beginPath();
-                this.ctx.ellipse(0, -25, 22, 18, 0, 0, Math.PI * 2);
-                this.ctx.fill();
-
-                this.ctx.beginPath();
-                this.ctx.arc(-28, -60, 9, 0, Math.PI * 2);
-                this.ctx.arc(0, -80, 10, 0, Math.PI * 2);
-                this.ctx.arc(28, -62, 9, 0, Math.PI * 2);
-                this.ctx.fill();
-                this.ctx.restore();
-            }
-
-            drawCatEar(x, y, rotation, outerColor, innerColor) {
+            drawGiantEar(x, y, angle, isLeft) {
                 this.ctx.save();
                 this.ctx.translate(x, y);
-                this.ctx.rotate(rotation);
+                this.ctx.rotate(angle);
 
-                this.ctx.fillStyle = outerColor;
+                const earGrad = this.ctx.createLinearGradient(0, -180, 0, 0);
+                earGrad.addColorStop(0, isLeft ? '#2b2b30' : '#e66a20');
+                earGrad.addColorStop(1, isLeft ? '#121215' : '#a33e08');
+
                 this.ctx.beginPath();
-                this.ctx.moveTo(0, -135);
-                this.ctx.lineTo(-60, 30);
-                this.ctx.lineTo(60, 30);
+                this.ctx.moveTo(-45, 20);
+                this.ctx.bezierCurveTo(-60, -90, -25, -170, 0, -190);
+                this.ctx.bezierCurveTo(25, -170, 60, -90, 45, 20);
                 this.ctx.closePath();
+                this.ctx.fillStyle = earGrad;
                 this.ctx.fill();
-                this.ctx.lineWidth = 5;
-                this.ctx.strokeStyle = '#1e1b18';
+                this.ctx.lineWidth = 4;
+                this.ctx.strokeStyle = '#0f0f14';
                 this.ctx.stroke();
 
-                this.ctx.fillStyle = innerColor;
-                this.ctx.beginPath();
-                this.ctx.moveTo(0, -110);
-                this.ctx.lineTo(-40, 20);
-                this.ctx.lineTo(40, 20);
-                this.ctx.closePath();
-                this.ctx.fill();
+                const innerGrad = this.ctx.createLinearGradient(0, -140, 0, 0);
+                innerGrad.addColorStop(0, '#ff9ebb');
+                innerGrad.addColorStop(1, '#c95977');
 
-                this.ctx.strokeStyle = '#ffffff';
-                this.ctx.lineWidth = 2.5;
                 this.ctx.beginPath();
-                this.ctx.moveTo(-20, 15);
-                this.ctx.lineTo(-8, -28);
-                this.ctx.moveTo(0, 18);
-                this.ctx.lineTo(6, -35);
-                this.ctx.moveTo(20, 15);
-                this.ctx.lineTo(16, -22);
-                this.ctx.stroke();
+                this.ctx.moveTo(-25, 10);
+                this.ctx.bezierCurveTo(-32, -70, -12, -130, 0, -145);
+                this.ctx.bezierCurveTo(12, -130, 32, -70, 25, 10);
+                this.ctx.closePath();
+                this.ctx.fillStyle = innerGrad;
+                this.ctx.fill();
 
                 this.ctx.restore();
             }
 
-            drawRealisticCatEye(x, y, isBlinking, pupilX, pupilY) {
+            drawStylizedEye(eyeX, eyeY, isBlinking, pupilX, pupilY) {
                 this.ctx.save();
-                this.ctx.translate(x, y);
+                this.ctx.translate(eyeX, eyeY);
 
                 if (isBlinking) {
                     this.ctx.lineWidth = 6;
-                    this.ctx.strokeStyle = '#1e1b18';
+                    this.ctx.strokeStyle = '#0f0f14';
                     this.ctx.lineCap = 'round';
                     this.ctx.beginPath();
                     this.ctx.arc(0, 0, 38, 0.2 * Math.PI, 0.8 * Math.PI);
                     this.ctx.stroke();
                 } else {
                     this.ctx.beginPath();
-                    this.ctx.ellipse(0, 0, 42, 54, 0, 0, Math.PI * 2);
-                    this.ctx.fillStyle = '#1e1b18';
+                    this.ctx.ellipse(0, 0, 26, 36, 0, 0, Math.PI * 2);
+                    this.ctx.fillStyle = '#0f1015';
                     this.ctx.fill();
 
-                    const irisGrad = this.ctx.createRadialGradient(0, 0, 5, 0, 0, 42);
-                    irisGrad.addColorStop(0, '#facc15');
-                    irisGrad.addColorStop(0.5, '#84cc16');
-                    irisGrad.addColorStop(0.95, '#3f6212');
-                    irisGrad.addColorStop(1, '#1e1b18');
+                    const eyeGrad = this.ctx.createLinearGradient(0, -30, 0, 30);
+                    eyeGrad.addColorStop(0, '#b8ff33');
+                    eyeGrad.addColorStop(0.5, '#2ecc71');
+                    eyeGrad.addColorStop(1, '#0b5345');
 
                     this.ctx.beginPath();
-                    this.ctx.ellipse(0, 0, 39, 51, 0, 0, Math.PI * 2);
-                    this.ctx.fillStyle = irisGrad;
+                    this.ctx.ellipse(0, 0, 22, 32, 0, 0, Math.PI * 2);
+                    this.ctx.fillStyle = eyeGrad;
                     this.ctx.fill();
 
-                    this.ctx.fillStyle = '#0f172a';
                     this.ctx.beginPath();
-                    this.ctx.ellipse(pupilX, pupilY, 12, 42, 0, 0, Math.PI * 2);
+                    this.ctx.ellipse(pupilX * 0.5, pupilY * 0.5, 8, 22, 0, 0, Math.PI * 2);
+                    this.ctx.fillStyle = '#030c08';
                     this.ctx.fill();
 
                     this.ctx.fillStyle = '#ffffff';
                     this.ctx.beginPath();
-                    this.ctx.arc(-12 + pupilX, -18 + pupilY, 11, 0, Math.PI * 2);
+                    this.ctx.arc(-7 + pupilX * 0.2, -12 + pupilY * 0.2, 6, 0, Math.PI * 2);
                     this.ctx.fill();
 
                     this.ctx.beginPath();
-                    this.ctx.arc(12 + pupilX, 16 + pupilY, 6, 0, Math.PI * 2);
+                    this.ctx.arc(6 + pupilX * 0.2, 10 + pupilY * 0.2, 3.5, 0, Math.PI * 2);
                     this.ctx.fill();
                 }
 
@@ -1500,14 +1454,12 @@
                     const primaryColor = obs.color || '#ff007f';
                     const secondaryColor = obs.secondaryColor || '#00f0ff';
 
-                    // Sombra de contacto suave sobre el planeta
                     this.ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
                     this.ctx.beginPath();
                     this.ctx.ellipse(0, 2, w * 0.6, 6, 0, 0, Math.PI * 2);
                     this.ctx.fill();
 
                     if (obs.type === 'spike') {
-                        // CRISTAL FACETADO 3D CON DEGRADADOS Y DESTELLO ANIMADO
                         const gradLeft = this.ctx.createLinearGradient(-w / 2, 0, 0, -h);
                         gradLeft.addColorStop(0, primaryColor);
                         gradLeft.addColorStop(1, '#ffffff');
@@ -1543,7 +1495,6 @@
                         this.ctx.fill();
 
                     } else if (obs.type === 'double_spike') {
-                        // DOBLE PÚA GEMELA CON ARCO DE ENERGÍA
                         const drawSingleCrystal = (cx, cy, cw, ch, col) => {
                             this.ctx.save();
                             this.ctx.translate(cx, cy);
@@ -1592,7 +1543,6 @@
                         this.ctx.stroke();
 
                     } else if (obs.type === 'box') {
-                        // CAJA DE CARTÓN CON OJITOS
                         const bw = w + 8;
                         const bh = h;
 
@@ -1650,7 +1600,6 @@
                         this.ctx.fillText('🐾', 0, -bh + 42);
 
                     } else if (obs.type === 'yarn_ball') {
-                        // BOLA DE ESTAMBRE EN ESPIRAL
                         const radius = h * 0.48;
                         const centerY = -radius;
 
@@ -1682,7 +1631,6 @@
                         this.ctx.stroke();
 
                     } else if (obs.type === 'fish_bone') {
-                        // ESPINA DE PESCADO DETALLADA
                         const bh = h;
 
                         this.ctx.save();
@@ -1736,7 +1684,6 @@
                         this.ctx.restore();
 
                     } else if (obs.type === 'cat_tree') {
-                        // ÁRBOL RASCADOR DE YUTE
                         const th = h;
 
                         const postGrad = this.ctx.createLinearGradient(-8, 0, 8, 0);
@@ -1783,7 +1730,6 @@
                         this.ctx.fill();
 
                     } else if (obs.type === 'laser_hurdle') {
-                        // TORRETA LÁSER CYBERPUNK
                         const lw = w;
                         const lh = h;
 
@@ -1846,60 +1792,57 @@
                     this.ctx.translate(x, y);
                     this.ctx.rotate(angle + Math.PI / 2);
 
-                    this.drawStickman(player);
+                    this.drawCalicoRunner(player);
                     this.drawNameplate(player);
 
                     this.ctx.restore();
                 });
             }
 
-            drawStickman(player) {
-                const scale = 1.3;
-
-                this.ctx.strokeStyle = player.color;
-                this.ctx.lineWidth = 4.5;
-                this.ctx.lineCap = 'round';
-
+            // JUGADORES ANIMADOS CON PATAS ARTICULADAS CALICÓ (GEMINI-CODE-1790211250591)
+            drawCalicoRunner(player) {
+                const time = performance.now() * 0.001;
+                const walkCycle = Math.sin(time * 12);
                 const isJumping = !player.isGrounded;
+                const scale = 0.35;
 
+                this.ctx.save();
+                this.ctx.scale(scale, scale);
+
+                const startY = -40;
+                const groundY = 0;
+
+                // Patas articuladas
+                this.drawRunnerLeg(-25, startY, groundY, isJumping ? 1 : walkCycle, player.color, true);
+                this.drawRunnerLeg(25, startY, groundY, isJumping ? -1 : -walkCycle, player.color, false);
+
+                // Cabeza/Cuerpo redondo del jugador
                 this.ctx.beginPath();
-                this.ctx.arc(0, -42 * scale, 9 * scale, 0, Math.PI * 2);
-                this.ctx.fillStyle = '#ffffff';
+                this.ctx.ellipse(0, -65, 30, 26, 0, 0, Math.PI * 2);
+                this.ctx.fillStyle = player.color;
                 this.ctx.fill();
+                this.ctx.lineWidth = 4;
+                this.ctx.strokeStyle = '#0f0f14';
                 this.ctx.stroke();
 
+                // Orejitas dinámicas del corredor
+                this.drawRunnerEar(-18, -88, -0.2, player.color);
+                this.drawRunnerEar(18, -88, 0.2, player.color);
+
+                // Ojitos brillantes
+                this.ctx.fillStyle = '#ffffff';
                 this.ctx.beginPath();
-                this.ctx.moveTo(0, -33 * scale);
-                this.ctx.lineTo(0, -15 * scale);
-                this.ctx.stroke();
+                this.ctx.arc(-10, -68, 5, 0, Math.PI * 2);
+                this.ctx.arc(10, -68, 5, 0, Math.PI * 2);
+                this.ctx.fill();
 
-                if (isJumping) {
-                    this.ctx.beginPath();
-                    this.ctx.moveTo(0, -28 * scale);
-                    this.ctx.lineTo(-12 * scale, -40 * scale);
-                    this.ctx.moveTo(0, -28 * scale);
-                    this.ctx.lineTo(12 * scale, -40 * scale);
-                    this.ctx.stroke();
+                this.ctx.fillStyle = '#0f0f14';
+                this.ctx.beginPath();
+                this.ctx.arc(-8, -68, 2.5, 0, Math.PI * 2);
+                this.ctx.arc(12, -68, 2.5, 0, Math.PI * 2);
+                this.ctx.fill();
 
-                    this.ctx.beginPath();
-                    this.ctx.moveTo(0, -15 * scale);
-                    this.ctx.lineTo(-10 * scale, -5 * scale);
-                    this.ctx.moveTo(0, -15 * scale);
-                    this.ctx.lineTo(10 * scale, -5 * scale);
-                    this.ctx.stroke();
-                } else {
-                    this.ctx.beginPath();
-                    this.ctx.moveTo(0, -28 * scale);
-                    this.ctx.lineTo(-10 * scale, -18 * scale);
-                    this.ctx.moveTo(0, -28 * scale);
-                    this.ctx.lineTo(10 * scale, -18 * scale);
-
-                    this.ctx.moveTo(0, -15 * scale);
-                    this.ctx.lineTo(-8 * scale, 0);
-                    this.ctx.moveTo(0, -15 * scale);
-                    this.ctx.lineTo(8 * scale, 0);
-                    this.ctx.stroke();
-                }
+                this.ctx.restore();
 
                 if (player.meowTimer > 0) {
                     this.ctx.fillStyle = '#ffffff';
@@ -1907,25 +1850,76 @@
                     this.ctx.lineWidth = 1.5;
                     this.ctx.beginPath();
                     if (this.ctx.roundRect) {
-                        this.ctx.roundRect(-28 * scale, -72 * scale, 56 * scale, 24 * scale, 6);
+                        this.ctx.roundRect(-28, -65, 56, 24, 6);
                     } else {
-                        this.ctx.rect(-28 * scale, -72 * scale, 56 * scale, 24 * scale);
+                        this.ctx.rect(-28, -65, 56, 24);
                     }
                     this.ctx.fill();
                     this.ctx.stroke();
 
                     this.ctx.fillStyle = '#e11d48';
-                    this.ctx.font = 'bold 13px sans-serif';
+                    this.ctx.font = 'bold 12px sans-serif';
                     this.ctx.textAlign = 'center';
-                    this.ctx.fillText('🐾 MEOW!', 0, -56 * scale);
+                    this.ctx.fillText('🐾 MEOW!', 0, -49);
                 }
+            }
+
+            drawRunnerLeg(startX, startY, groundY, cycle, color, isLeft) {
+                this.ctx.save();
+                const stepForward = cycle * 15;
+                const stepUp = Math.max(0, -cycle * 10);
+
+                const footX = startX + stepForward;
+                const footY = groundY - stepUp;
+                const midX = (startX + footX) / 2 + (isLeft ? -8 : 8);
+                const midY = (startY + footY) / 2;
+
+                this.ctx.beginPath();
+                this.ctx.moveTo(startX - 6, startY);
+                this.ctx.quadraticCurveTo(midX - 5, midY, footX - 8, footY - 4);
+                this.ctx.quadraticCurveTo(footX, footY + 4, footX + 8, footY - 4);
+                this.ctx.quadraticCurveTo(midX + 5, midY, startX + 6, startY);
+
+                this.ctx.fillStyle = color;
+                this.ctx.fill();
+                this.ctx.lineWidth = 2.5;
+                this.ctx.strokeStyle = '#0f0f14';
+                this.ctx.stroke();
+                this.ctx.restore();
+            }
+
+            drawRunnerEar(x, y, angle, color) {
+                this.ctx.save();
+                this.ctx.translate(x, y);
+                this.ctx.rotate(angle);
+
+                this.ctx.beginPath();
+                this.ctx.moveTo(-12, 10);
+                this.ctx.lineTo(0, -22);
+                this.ctx.lineTo(12, 10);
+                this.ctx.closePath();
+                this.ctx.fillStyle = color;
+                this.ctx.fill();
+                this.ctx.lineWidth = 3;
+                this.ctx.strokeStyle = '#0f0f14';
+                this.ctx.stroke();
+
+                this.ctx.beginPath();
+                this.ctx.moveTo(-6, 6);
+                this.ctx.lineTo(0, -12);
+                this.ctx.lineTo(6, 6);
+                this.ctx.closePath();
+                this.ctx.fillStyle = '#ff9ebb';
+                this.ctx.fill();
+
+                this.ctx.restore();
             }
 
             drawNameplate(player) {
                 this.ctx.font = 'bold 15px sans-serif';
                 const textWidth = this.ctx.measureText(player.name).width;
 
-                const plateY = -92;
+                const plateY = -52;
                 const plateWidth = textWidth + 18;
                 const plateHeight = 22;
 
@@ -2140,7 +2134,7 @@
             }
         }
 
-        // Window load routing
+        // Window routing
         let game = null;
         let controller = null;
 
