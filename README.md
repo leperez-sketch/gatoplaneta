@@ -9,12 +9,15 @@ Juego de ritmo multijugador estilo **caricatura de los años 20** (rubber hose).
 1. Abre la página en un PC/TV (la "pantalla").
 2. Cada jugador escanea el QR o entra a `play.html` y escribe el código de 4 letras.
 3. A cada uno le toca un personaje al azar (aguacate, lata, maní, palmera…).
-4. **¡SALTA!** cuando el obstáculo llegue a tus pies. Saltar justo en el ritmo da **¡PERFECTO!** (x3) y combo.
-5. Cuando aparece el letrero **¡AL REVÉS!**, la rueda cambia de sentido.
+4. **¡SALTA!** cuando el obstáculo llegue a tus pies. Los saltos son "flotantes" (~1,1 s en el aire) y **tocar otra vez en el aire hace un DOBLE SALTO** con voltereta, ideal para pasar 2 o 3 obstáculos seguidos.
+5. Saltar justo en el ritmo da **¡PERFECTO!** (x3) y combo.
+6. **¡AL REVÉS!**: la rueda cambia de sentido. **¡MÁS RÁPIDO!**: cada ~25–38 s (al azar) la rueda acelera.
+7. La rueda tiene dos carriles (adelante y atrás, separados por una línea punteada). En algunas secciones hay obstáculos de **medio carril**: solo saltan los del carril afectado.
+8. El fondo cambia de color según la energía de la canción (azul/verde tranquilo, morado con ritmo, rojo/magenta intenso, naranja a tope).
 
 | Acción | Celular | Teclado 1 | Teclado 2 |
 |---|---|---|---|
-| Saltar | botón gigante | Espacio / W | ↑ |
+| Saltar (2 veces = doble salto) | botón gigante | Espacio / W | ↑ |
 | Maullar | 🐾 ¡MIAU! | M | N |
 
 En la pantalla: **H** muestra los hitboxes, **Esc/P** pausa (intermedio).
@@ -60,14 +63,16 @@ El TURN público incluido (`openrelay.metered.ca`) es "de mejor esfuerzo": puede
 ## Ritmo y obstáculos
 
 - Al cargar una canción se analiza en un *Web Worker*: flujo espectral → tempo por autocorrelación → seguimiento de beats por programación dinámica → fuerza/energía por beat y tiempo 1 del compás.
-- La partitura coloca cada llegada **en un beat**, elige los golpes más fuertes, sube la densidad con la energía de la canción y cambia de sentido en inicios de frase.
+- La partitura lee las **notas** de la canción (onsets en semicorcheas), no solo el pulso, como un Guitar Hero: acentos fuertes → obstáculo suelto y grande; ráfagas de notas → grupos de 2–3 obstáculos seguidos, cada uno en su nota, que se pasan con un salto largo o doble salto. Por eso el intervalo entre obstáculos varía con la música (no es predecible).
+- La densidad y los patrones suben con la energía de cada frase; hay secciones de medio carril, cambios de sentido en inicios de frase y aceleraciones cada ~25–38 s.
+- La partitura se genera en un *Web Worker* durante la transición, sin congelar la pantalla.
 - Los jugadores se ubican sobre la cabeza separados por **una fracción musical** (1, ½ o ¼ de beat) de recorrido del obstáculo: a cada uno le llega su obstáculo justo en un tiempo o subdivisión.
 - Puedes cargar **cualquier MP3** desde el lobby; el botón ↺ vuelve a la canción original.
 - *Ajustes → Retraso del audio*: compensa parlantes Bluetooth o TV con retraso.
 
 ### Hitboxes
 
-Cada obstáculo es una unión de primitivas (caja, círculo, triángulo). **Las mismas primitivas construyen la malla 3D y la colisión**, así que lo que ves es lo que golpea. La colisión se calcula a 240 Hz. Antes de aceptar un obstáculo, el generador **prueba todos los momentos de despegue posibles** con la física real y exige una ventana de salto mínima (Fácil 200 ms, Normal 150 ms, Difícil 110 ms); si no se puede saltar, lo encoge. El hitbox del jugador es un poco más angosto que el dibujo (más justo para el jugador).
+Cada obstáculo es una unión de primitivas (caja, círculo, triángulo). **Las mismas primitivas construyen la malla 3D y la colisión**, así que lo que ves es lo que golpea. La colisión se calcula a 240 Hz. Antes de aceptar un grupo de obstáculos, el generador **prueba todos los despegues posibles y todos los momentos de doble salto** con la física real, y exige una ventana mínima de despegue (Fácil 160 ms, Normal 120 ms, Difícil 90 ms). Si no se puede pasar, encoge los obstáculos o quita uno del grupo; también garantiza que aterrices a tiempo para el siguiente grupo en tu carril. El hitbox del jugador es un poco más angosto que el dibujo (más justo para el jugador).
 
 ```bash
 # test de partitura + hitboxes (necesita ffmpeg para convertir el audio)
@@ -77,7 +82,7 @@ npm test -- /tmp/ww.f32
 
 Hay también un test de red de punta a punta (`tests/red.e2e.cjs`: dos celulares, reconexión, recarga del host y saltos con lag real).
 
-El test de partitura verifica en las 3 dificultades: que todo obstáculo tenga ventana de salto, que un jugador que salta perfecto sobreviva **toda la canción en cualquier posición** del grupo, que sin saltar se muera, y que cada llegada caiga en el ritmo.
+El test de partitura (3 dificultades × 3 semillas) verifica que todo grupo tenga ventana de despegue, que un jugador que sigue el plan (con doble salto cuando hace falta) sobreviva **toda la canción en cualquier posición y carril**, que sin saltar se muera y que cada llegada caiga en el ritmo. También reporta la variedad: grupos de 1/2/3, medio carril, aceleraciones y cuánto varía el intervalo entre obstáculos.
 
 ## Personajes
 

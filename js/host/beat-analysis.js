@@ -170,6 +170,25 @@ export function analyzeBeats(mono, rate, onProgress) {
   const downbeatPhase = phaseSum.indexOf(Math.max(...phaseSum));
   if (onProgress) onProgress(1);
 
+  // ---- Onsets en semicorcheas (4 por beat): la "melodía rítmica" de la canción
+  //      que usa el generador para leer la música como un Guitar Hero.
+  const subRaw = [];
+  for (let bi = 0; bi < frames.length; bi++) {
+    const f = frames[bi];
+    const f2 = bi + 1 < frames.length ? frames[bi + 1] : f + period;
+    const row = [];
+    for (let k = 0; k < 4; k++) {
+      const c = Math.round(f + (k * (f2 - f)) / 4);
+      let m = 0;
+      for (let i = Math.max(0, c - 2); i <= Math.min(nFrames - 1, c + 2); i++) m = Math.max(m, env[i]);
+      row.push(m);
+    }
+    subRaw.push(row);
+  }
+  const flat = subRaw.flat().sort((a, b) => a - b);
+  const p95 = flat[Math.floor(flat.length * 0.95)] || 1;
+  const sub = subRaw.map((r) => r.map((x) => Math.round(Math.min(1, x / p95) * 1000) / 1000));
+
   // BPM medido real (mediana de intervalos)
   const ivs = [];
   for (let i = 1; i < beats.length; i++) ivs.push(beats[i] - beats[i - 1]);
@@ -179,7 +198,7 @@ export function analyzeBeats(mono, rate, onProgress) {
   return {
     bpm: Math.round(600 / med) / 10,
     beatDur: med,
-    beats, strength: nStrength, energy: nEnergy, low: nLow,
+    beats, strength: nStrength, energy: nEnergy, low: nLow, sub,
     downbeatPhase,
     duration: mono.length / rate,
   };

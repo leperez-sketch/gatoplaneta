@@ -217,7 +217,7 @@
     var st = $('status');
     var editable = phase === 'lobby';
     $('btn-edit').style.display = editable ? '' : 'none';
-    if (phase === 'lobby') { st.textContent = '🎟️ En el lobby · ¡prueba a saltar!'; judge('¡Listo!', null); }
+    if (phase === 'lobby') { st.textContent = '🎟️ En el lobby · ¡prueba a saltar! (toca 2 veces = doble salto)'; judge('¡Listo!', null); }
     else if (phase === 'countdown') { st.textContent = '🎬 ¡Empieza la función!'; judge('3… 2… 1…', 0); }
     else if (phase === 'playing') st.textContent = alive ? '🎵 ¡Salta al ritmo!' : '💫 Fuera de juego';
     else if (phase === 'spectate') st.textContent = '⏳ Entras en la próxima función';

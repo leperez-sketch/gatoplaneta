@@ -16,6 +16,7 @@ export const PAL = {
 };
 
 const FS = 1024;
+function hexRgb(h) { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
 
 export class CatWheel {
   constructor(scene, R, D) {
@@ -36,6 +37,9 @@ export class CatWheel {
     }
     // bordes negros (frente y atrás)
     g.fillStyle = PAL.black; g.fillRect(0, 0, 2048, 10); g.fillRect(0, 246, 2048, 10);
+    // línea punteada que divide los carriles (adelante / atrás)
+    g.fillStyle = 'rgba(255,250,240,0.85)';
+    for (let x = 0; x < 2048; x += 48) g.fillRect(x, 124, 26, 8);
     const sideTex = new THREE.CanvasTexture(side);
     sideTex.colorSpace = THREE.SRGBColorSpace; sideTex.wrapS = THREE.RepeatWrapping; sideTex.anisotropy = 8;
     this.spin = new THREE.Group();
@@ -236,13 +240,18 @@ export class CatWheel {
     const k = R / 10;
     const unit = Math.abs(CT.y - C0.y) / R * k; // píxeles por 'unidad de dibujo' (escalada con R)
 
-    // fondo azul con rayos de sol
-    ctx.fillStyle = PAL.blue; ctx.fillRect(0, 0, W, H);
+    // fondo con rayos de sol; el color cambia suave según la sección de la canción
+    const tgt = hexRgb(st.bg || PAL.blue);
+    if (!this.bgRGB) this.bgRGB = tgt.slice();
+    for (let i = 0; i < 3; i++) this.bgRGB[i] += (tgt[i] - this.bgRGB[i]) * Math.min(1, (st.dt || 0.016) * 1.6);
+    const [br, bgc, bb] = this.bgRGB.map(Math.round);
+    ctx.fillStyle = `rgb(${br},${bgc},${bb})`; ctx.fillRect(0, 0, W, H);
+    const lr = Math.round(br + (255 - br) * 0.28), lg = Math.round(bgc + (255 - bgc) * 0.28), lb = Math.round(bb + (255 - bb) * 0.28);
     ctx.save();
     ctx.translate(C0.x, C0.y);
     ctx.rotate(this.time * 0.05 * (st.dir || 1));
     const rays = 18;
-    ctx.fillStyle = `rgba(110,120,255,${0.13 + pulse * 0.08})`;
+    ctx.fillStyle = `rgba(${lr},${lg},${lb},${0.22 + pulse * 0.1})`;
     for (let i = 0; i < rays; i++) {
       const a0 = (i / rays) * Math.PI * 2, a1 = a0 + Math.PI / rays;
       ctx.beginPath(); ctx.moveTo(0, 0);

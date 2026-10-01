@@ -69,17 +69,25 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await phones[0].p.tap('#btn-jump');
   await sleep(300);
   await host.evaluate(() => { game.difficulty = 'facil'; const b = game.addBot(); b.skill = 1; game.startMatch(); });
-  await host.waitForFunction(() => game.state === 'playing', null, { timeout: 20000 });
+  await host.waitForFunction(() => game.state === 'playing', null, { timeout: 40000 });
   const keyA2 = keyA;
   // jugador A: saltos guiados por el chart (simula a un humano perfecto con su latencia real)
-  const plan = await host.evaluate((k) => { const p = game.players.get(k); return game.chart.events.slice(0, 8).map((e) => e.tArr + e.dir * p.s / e.v + e.bestTau); }, keyA2);
-  console.log('plan saltos A', plan.map((x) => x.toFixed(2)).join(' '));
-  for (const tj of plan) {
+  // saltos (y dobles saltos) guiados por el plan de la partitura para el carril de A.
+  // Se recalcula cada vez con la posición ACTUAL de A (cambia tras cada cambio de sentido/velocidad).
+  const nextTouch = (k, after) => host.evaluate(([k, after]) => { const p = game.players.get(k); const out = [];
+    for (const c of game.chart.clusters) { const pl = c.plans[p.laneName]; if (!pl) continue; const a = c.anchor + c.dir * p.s / c.v;
+      out.push(a + pl.t0); if (pl.t1 !== null) out.push(a + pl.t1); } return out.find((x) => x > after); }, [k, after]);
+  let last = 0, touches = 0;
+  while (touches < 14) {
+    const tj = await nextTouch(keyA2, last + 0.05);
+    if (!tj) break;
     while (true) { const t = await host.evaluate(() => game.audio.songTime()); if (t >= tj - 0.03) break; await sleep(8); }
-    await phones[0].p.evaluate(() => { const e = new Event('touchstart', { cancelable: true }); document.getElementById('btn-jump').dispatchEvent(e); document.getElementById('btn-jump').dispatchEvent(new Event('touchend', { cancelable: true })); });
+    await phones[0].p.evaluate(() => { const b = document.getElementById('btn-jump'); b.dispatchEvent(new Event('touchstart', { cancelable: true })); b.dispatchEvent(new Event('touchend', { cancelable: true })); });
+    last = tj; touches++;
   }
+  console.log('toques de A enviados:', touches, 'hasta t =', last.toFixed(1));
   await sleep(1500);
-  const res = await host.evaluate(() => [...game.players.values()].map((p) => ({ n: p.name, alive: p.alive, score: p.score, perf: p.perfects, cleared: p.cleared })));
+  const res = await host.evaluate(() => [...game.players.values()].map((p) => ({ n: p.name, lane: p.laneName, alive: p.alive, score: p.score, perf: p.perfects, cleared: p.cleared })));
   console.log('resultado parcial', JSON.stringify(res));
   await host.screenshot({ path: OUT + 'e2e_game.png' });
   await phones[0].p.screenshot({ path: OUT + 'e2e_phone_game.png' });

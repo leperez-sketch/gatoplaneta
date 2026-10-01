@@ -55,6 +55,7 @@ export class FX {
   popup(text, wpos, color, size = 1) { this.popups.push({ text, w: wpos.clone(), color, size, t: 0, life: 0.7 }); }
   poof(wpos, scale = 1) { this.poofs.push({ w: wpos.clone(), t: 0, life: 0.45, scale, seed: Math.random() * 10 }); }
   bubble(id, text) { this.bubbles = this.bubbles.filter((b) => b.id !== id); this.bubbles.push({ id, text, t: 0, life: 1.3 }); }
+  flash() { this.flashT = 0.35; }
   koStars(wpos) { for (let i = 0; i < 5; i++) this.stars.push({ w: wpos.clone(), t: 0, life: 1.2, a: (i / 5) * Math.PI * 2 }); }
 
   /** Transición de iris: dir 'close' (se cierra a negro) o 'open'. */
@@ -138,6 +139,12 @@ export class FX {
     if (!this.lowFx) this.drawFilm(ctx, W, H);
     this.drawFrame(ctx, W, H);
 
+    // ---- destello (aceleración)
+    if (this.flashT > 0) {
+      this.flashT -= dt;
+      ctx.fillStyle = `rgba(255,250,230,${Math.max(0, this.flashT / 0.35) * 0.55})`;
+      ctx.fillRect(0, 0, W, H);
+    }
     // ---- iris
     if (this.iris) {
       const ir = this.iris; ir.t += dt;

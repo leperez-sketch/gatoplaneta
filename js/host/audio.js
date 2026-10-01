@@ -161,6 +161,8 @@ export class AudioEngine {
     this._noise(0.25, 0.4, 900, 200, 0.02);
     this._osc('square', 90, 40, 0.25, 0.12, 0.02);
   }
+  doubleJump() { this._osc('sine', 520, 1300, 0.14, 0.09); this._osc('triangle', 780, 1560, 0.12, 0.05, 0.04); }
+  speedUp() { [392, 523, 659, 784, 1046].forEach((f, i) => this._osc('square', f, 0, 0.09, 0.06, i * 0.06)); this._noise(0.4, 0.08, 800, 4000); }
   poof() { this._noise(0.18, 0.08, 2500, 600); }
   tick(high) { this._osc('square', high ? 1046 : 784, 0, 0.09, 0.08); }
   screech() { this._noise(0.5, 0.18, 3000, 600); this._osc('sawtooth', 900, 300, 0.45, 0.04); }

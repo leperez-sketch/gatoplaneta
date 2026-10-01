@@ -5,7 +5,7 @@ import { AudioEngine } from './audio.js';
 import { loadCharacters, CHARACTERS } from './characters.js';
 import { Game } from './game.js';
 import { HostNet, probeIce } from './net.js';
-import { DIFFICULTY } from './chart.js';
+import { DIFFICULTY, changeAt } from './chart.js';
 
 window.__booted = true;
 clearTimeout(window.__bootTimer);
@@ -56,6 +56,7 @@ const ui = {
   onState(state, ranking) {
     $('lobby').classList.toggle('hidden', state !== 'lobby');
     $('hud').classList.toggle('hidden', state !== 'playing' && state !== 'countdown');
+    if (state === 'preparing') return;
     $('results').classList.toggle('hidden', state !== 'results');
     if (state === 'lobby') { this.refreshLobby(); net && net.broadcast({ t: 'state', phase: 'lobby' }); }
     if (state === 'countdown') {
@@ -82,12 +83,21 @@ const ui = {
     step();
   },
 
-  reversal(dir) {
+  /** Letrero de aviso: cambio de sentido y/o aceleración. */
+  change(r) {
     const card = $('card');
-    const arrow = dir > 0 ? '⟶' : '⟵';
-    card.innerHTML = `<div class="sign">${dir > 0 ? '' : `<span class="arrow">${arrow}</span>`}¡Al revés!${dir > 0 ? `<span class="arrow">${arrow}</span>` : ''}</div>`;
+    const arrow = r.dir > 0 ? '⟶' : '⟵';
+    let html = '';
+    if (r.speed) html += `<div class="sign speed"><span class="arrow">⚡</span>¡Más rápido!<span class="arrow">⚡</span></div>`;
+    if (r.rev) html += `<div class="sign ${r.speed ? 'second' : ''}">${r.dir > 0 ? '' : `<span class="arrow">${arrow}</span>`}¡Al revés!${r.dir > 0 ? `<span class="arrow">${arrow}</span>` : ''}</div>`;
+    card.innerHTML = html;
     clearTimeout(this.signTimer);
-    this.signTimer = setTimeout(() => { if (card.firstChild && card.firstChild.classList.contains('sign')) card.innerHTML = ''; }, 1700);
+    this.signTimer = setTimeout(() => { if (card.querySelector('.sign')) card.innerHTML = ''; }, 1900);
+  },
+  preparing(on) {
+    const card = $('card');
+    if (on) card.innerHTML = '<div class="title-card small" style="color:#fff">Preparando…</div>';
+    else if (card.textContent.indexOf('Preparando') >= 0) card.innerHTML = '';
   },
 
   hudTimer: 0,
@@ -98,6 +108,8 @@ const ui = {
     const ps = [...players.values()].filter((p) => !p.waiting);
     $('hud-alive').textContent = `${ps.filter((p) => p.alive).length}/${ps.length}`;
     $('hud-prog').style.width = Math.max(0, Math.min(100, (t / chart.duration) * 100)) + '%';
+    const ch = changeAt(chart, t);
+    $('hud-speed').textContent = 'x' + (chart.changes[0].travel / ch.travel).toFixed(2).replace(/0$/, '');
     ps.sort((a, b) => (b.alive - a.alive) || (b.score - a.score));
     $('hud-scores').innerHTML = ps.slice(0, 10).map((p) => `<li class="${p.alive ? '' : 'out'}"><i style="background:${p.color}"></i>${esc(p.name)} <b>${p.score}</b>${p.combo > 2 ? `<span class="c">x${p.combo}</span>` : ''}</li>`).join('');
   },

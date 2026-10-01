@@ -1,12 +1,17 @@
 // =====================================================================
-//  Generador de "partitura" de obstáculos a partir del análisis de beats.
-//  - Cada obstáculo LLEGA al jugador exactamente en un beat.
-//  - La rueda manda obstáculos de izquierda→derecha o derecha→izquierda;
-//    cambia de sentido en inicios de frase con aviso.
-//  - Cada obstáculo se valida con la física real: siempre existe una
-//    ventana de salto de al menos `minWindow` segundos. Si no, se encoge.
+//  Generador de la "partitura" de obstáculos (estilo Guitar Hero).
+//
+//  Lee las NOTAS de la canción (onsets en semicorcheas), no solo el pulso:
+//   - Acentos fuertes → obstáculo suelto (más grande).
+//   - Ráfagas de notas → grupos de 2–3 obstáculos seguidos que se pasan
+//     con un salto largo o con DOBLE SALTO, cada uno en su nota.
+//   - Secciones de "medio carril": obstáculos solo adelante o solo atrás.
+//   - Cada ~25–38 s (al azar, en inicio de frase) la rueda ACELERA.
+//   - En inicios de frase la rueda puede cambiar de sentido.
+//  Todo grupo se valida con la física real (planCluster): siempre existe
+//  una ventana de despegue jugable; si no, se encoge o se simplifica.
 // =====================================================================
-import { PHYS, jumpWindow } from './physics.js';
+import { PHYS, planCluster } from './physics.js';
 import { KIND_LIST, makeObstacleShape } from './catalog.js';
 
 export function mulberry32(a) {
@@ -19,142 +24,18 @@ export function mulberry32(a) {
 }
 
 export const DIFFICULTY = {
-  facil:   { label: 'Fácil',   minWindow: 0.20, gapExtra: 0.20, travelMul: 1.18, bias: -0.25, sizeMul: 0.75, revProb: 0.25 },
-  normal:  { label: 'Normal',  minWindow: 0.15, gapExtra: 0.08, travelMul: 1.0,  bias: 0.0,   sizeMul: 1.0,  revProb: 0.38 },
-  dificil: { label: 'Difícil', minWindow: 0.11, gapExtra: 0.0,  travelMul: 0.86, bias: 0.22,  sizeMul: 1.0,  revProb: 0.5 },
+  facil:   { label: 'Fácil',   minWindow: 0.16, thr: 0.1,   pat2: 0.6, pat3: 0.0, half: 0.6, travel0: 2.45, speedUp: [1.07, 1.11], minTravel: 1.55, revProb: 0.25, skip: 0.45, sizeMul: 0.8 },
+  normal:  { label: 'Normal',  minWindow: 0.12, thr: 0,     pat2: 1.0, pat3: 1.0, half: 1.0, travel0: 2.2,  speedUp: [1.09, 1.15], minTravel: 1.25, revProb: 0.35, skip: 0.28, sizeMul: 1.0 },
+  dificil: { label: 'Difícil', minWindow: 0.09, thr: -0.08, pat2: 1.3, pat3: 1.6, half: 1.3, travel0: 2.0,  speedUp: [1.12, 1.18], minTravel: 1.0,  revProb: 0.45, skip: 0.15, sizeMul: 1.0 },
 };
 
-const cache = new Map();
-function windowFor(shape, v) {
-  const key = shape.kind + '|' + shape.w.toFixed(3) + '|' + shape.h.toFixed(3) + '|' + v.toFixed(2);
-  let r = cache.get(key);
-  if (!r) { r = jumpWindow(shape.prims, v); cache.set(key, r); }
-  return r;
-}
+export const LANES = ['front', 'back'];
+const PHRASE = 16;
+const CLEAR = 1.3;          // s sin llegadas antes de un cambio (velocidad/sentido)
+const MIN_SEP = 0.17;       // separación mínima entre obstáculos seguidos (s)
 
-export function generateChart(an, opts = {}) {
-  const D = DIFFICULTY[opts.difficulty] || DIFFICULTY.normal;
-  const rng = mulberry32(opts.seed >>> 0 || 1234);
-  const { beats, strength, energy, duration } = an;
-  const bd = an.beatDur;
-  const minGap = PHYS.AIR_TIME + 0.24 + D.gapExtra; // tiempo mínimo entre llegadas consecutivas
-  const firstT = Math.max(4.0, opts.leadIn || 4.0);
-  const lastT = duration - 1.2;
-  const PHRASE = 16;
-  const REV_CLEAR = 1.3; // s libres antes de un cambio de sentido
-  const phase0 = an.downbeatPhase || 0;
-
-  const events = [];
-  const reversals = []; // {t, dir}
-  let dir = rng() < 0.5 ? 1 : -1;
-  reversals.push({ t: -999, dir });
-  let travel = null;            // tiempo de viaje del sentido actual
-  let lastArrival = -999;
-  let blockUntil = 0;           // tras un cambio de sentido no hay llegadas antes de esto
-  let phrasesSinceRev = 0;
-  let prevKind = '';
-
-  // Agrupa los beats en frases de 16 alineadas al tiempo 1
-  for (let start = phase0; start < beats.length; start += PHRASE) {
-    const idx = [];
-    for (let i = start; i < Math.min(beats.length, start + PHRASE); i++) idx.push(i);
-    if (!idx.length) break;
-    const tStart = beats[idx[0]];
-    if (beats[idx[idx.length - 1]] < firstT) continue;
-    if (tStart > lastT) break;
-
-    const meanE = idx.reduce((a, i) => a + energy[i], 0) / idx.length;
-    const progress = tStart / duration;
-    const intensity = Math.max(0, Math.min(1, 0.6 * meanE + 0.4 * progress + D.bias));
-    const level = intensity < 0.28 ? 0 : intensity < 0.55 ? 1 : intensity < 0.8 ? 2 : 3;
-
-    // Tiempo de viaje objetivo (más rápido hacia el final)
-    const target = (2.15 - 0.6 * progress) * D.travelMul;
-    const travelBeats = Math.max(2, Math.round(target / bd));
-    let newTravel = travelBeats * bd;
-
-    // ¿Cambia de sentido en esta frase?
-    if (events.length > 0 && phrasesSinceRev >= 1 && (rng() < D.revProb + 0.06 * level || phrasesSinceRev >= 4)) {
-      dir = -dir;
-      phrasesSinceRev = 0;
-      const tr = tStart;
-      reversals.push({ t: tr, dir });
-      travel = newTravel;
-      blockUntil = tr + travel + 0.05;
-      // las llegadas viejas deben acabar antes del cambio
-      // las llegadas viejas deben acabar antes del cambio (margen para jugadores alejados del centro)
-      while (events.length && events[events.length - 1].tArr > tr - REV_CLEAR) events.pop();
-      lastArrival = events.length ? events[events.length - 1].tArr : -999;
-    } else {
-      phrasesSinceRev++;
-      // La velocidad solo cambia en los cambios de sentido: así los jugadores
-      // (separados por fracciones de beat) siempre quedan sincronizados.
-      if (travel === null) travel = newTravel;
-    }
-
-    const gapBeats = [4, 2, 2, 1][level];
-    const allowDoubles = level >= 2;
-    let maxCount = Math.ceil(idx.length / gapBeats);
-    if (allowDoubles) maxCount += 2;
-
-    // Candidatos ordenados por musicalidad
-    const cands = idx
-      .filter((i) => beats[i] >= Math.max(firstT, blockUntil) && beats[i] <= lastT)
-      .map((i) => {
-        const pos = ((i - phase0) % 4 + 4) % 4;
-        const accent = pos === 0 ? 0.35 : pos === 2 ? 0.15 : 0;
-        return { i, t: beats[i], sc: strength[i] + accent + rng() * 0.15 };
-      })
-      .sort((a, b) => b.sc - a.sc);
-
-    const chosen = [];
-    for (const c of cands) {
-      if (chosen.length >= maxCount) break;
-      const gapNeeded = Math.max(minGap, (allowDoubles ? 1 : gapBeats) * bd - 0.01);
-      const near = (t) => Math.abs(t - c.t) < Math.max(minGap, (chosen.length < idx.length / gapBeats ? gapBeats : 1) * bd - 0.01);
-      if (c.t - lastArrival < gapNeeded) continue;
-      if (chosen.some((o) => near(o.t))) continue;
-      chosen.push(c);
-    }
-    chosen.sort((a, b) => a.t - b.t);
-
-    const v = (PHYS.SPAWN_ARC * PHYS.R) / travel;
-    for (const c of chosen) {
-      if (c.t - lastArrival < minGap) continue;
-      // tipo y tamaño
-      let kind;
-      do { kind = KIND_LIST[Math.floor(rng() * KIND_LIST.length)]; } while (kind === prevKind && KIND_LIST.length > 1);
-      prevKind = kind;
-      const big = Math.min(1, strength[c.i] * 0.7 + rng() * 0.5) * D.sizeMul;
-      let sw = Math.min(1, big * (0.6 + rng() * 0.6));
-      let sh = Math.min(1, big * (0.6 + rng() * 0.6));
-      // Obstáculos seguidos: más pequeños
-      if (c.t - lastArrival < minGap + 0.25) { sw *= 0.5; sh *= 0.6; }
-      let shape = makeObstacleShape(kind, sw, sh);
-      let win = windowFor(shape, v);
-      let guard = 0;
-      while (win.window < D.minWindow && guard++ < 12) {
-        sw *= 0.8; sh *= 0.85;
-        shape = makeObstacleShape(kind, sw, sh);
-        win = windowFor(shape, v);
-      }
-      if (win.window < D.minWindow) continue; // imposible: se descarta
-      events.push({
-        id: events.length,
-        tArr: c.t,
-        tSpawn: c.t - travel,
-        dir, v, travel,
-        kind: shape.kind, w: shape.w, h: shape.h, prims: shape.prims,
-        window: win.window, bestTau: win.best, winFrom: win.from, winTo: win.to,
-        accent: strength[c.i],
-        seed: Math.floor(rng() * 1e9),
-      });
-      lastArrival = c.t;
-    }
-  }
-  events.forEach((e, i) => { e.id = i; });
-  return { events, reversals, bpm: an.bpm, beatDur: bd, beats, duration, downbeatPhase: phase0, difficulty: opts.difficulty || 'normal' };
-}
+/** ¿El obstáculo de carril `lane` afecta al carril de jugador `pl`? */
+export function laneHits(lane, pl) { return lane === 'all' || lane === pl; }
 
 /**
  * Separación entre jugadores sobre la cabeza: una fracción musical de beat
@@ -171,9 +52,193 @@ export function playerSpacing(v, beatDur, n) {
   return { spacing: 0.75, sub: 0 };
 }
 
+export function generateChart(an, opts = {}) {
+  const D = DIFFICULTY[opts.difficulty] || DIFFICULTY.normal;
+  const rng = mulberry32(opts.seed >>> 0 || 1234);
+  const { beats, strength, energy, duration } = an;
+  const bd = an.beatDur;
+  const phase0 = an.downbeatPhase || 0;
+  const firstT = Math.max(4.5, opts.leadIn || 4.5);
+  const lastT = duration - 1.5;
+  const snap = (x) => Math.max(2 * bd, Math.round(x / (bd / 2)) * (bd / 2)); // viaje en medios beats
+
+  // ---- notas candidatas (semicorcheas)
+  const sub = an.sub || beats.map((_, i) => [strength[i], 0, 0, 0]);
+  const notes = [];
+  for (let i = 0; i < beats.length; i++) {
+    const nb = beats[i + 1] || beats[i] + bd;
+    for (let k = 0; k < 4; k++) {
+      const s = (sub[i] && sub[i][k]) || 0;
+      if (s <= 0.05) continue;
+      const pos = ((i - phase0) % 4 + 4) % 4;
+      const acc = (k === 0 ? 0.22 : k === 2 ? 0.08 : 0) + (k === 0 && pos === 0 ? 0.18 : 0) + (k === 0 && pos === 2 ? 0.06 : 0);
+      notes.push({ t: beats[i] + (k * (nb - beats[i])) / 4, s, score: s + acc, i, k });
+    }
+  }
+
+  const events = [], clusters = [], sections = [];
+  let dir = rng() < 0.5 ? 1 : -1;
+  let travel = snap(D.travel0);
+  let speedLevel = 0;
+  const changes = [{ t: -999, dir, travel, v: (PHYS.SPAWN_ARC * PHYS.R) / travel, rev: false, speed: false, level: 0 }];
+  let nextSpeedUp = firstT + 22 + rng() * 14;
+  let prevLand = { front: -99, back: -99 };
+  let lastArr = -99, blockUntil = 0, phrasesSinceRev = 0, prevKind = '';
+
+  const recomputeTail = () => {
+    prevLand = { front: -99, back: -99 }; lastArr = -99;
+    for (const c of clusters) {
+      lastArr = Math.max(lastArr, c.lastArr);
+      for (const l of LANES) if (c.plans[l]) prevLand[l] = Math.max(prevLand[l], c.anchor + c.plans[l].land);
+    }
+  };
+
+  for (let pi = phase0; pi < beats.length; pi += PHRASE) {
+    const tp = beats[pi];
+    if (tp > lastT) break;
+    const tEnd = beats[Math.min(beats.length - 1, pi + PHRASE)] || duration;
+    let meanE = 0, n = 0;
+    for (let i = pi; i < Math.min(beats.length, pi + PHRASE); i++) { meanE += energy[i]; n++; }
+    meanE /= Math.max(1, n);
+    const progress = tp / duration;
+    const intensity = Math.max(0, Math.min(1, 0.65 * meanE + 0.35 * progress));
+    const level = intensity < 0.28 ? 0 : intensity < 0.52 ? 1 : intensity < 0.76 ? 2 : 3;
+    sections.push({ t: tp, level, energy: meanE });
+    if (tEnd < firstT) continue;
+
+    // ---- cambios de velocidad / sentido (en inicio de frase)
+    if (tp >= firstT) {
+      const doSpeed = tp >= nextSpeedUp && travel > D.minTravel + 0.01;
+      const doRev = clusters.length > 0 && phrasesSinceRev >= 1 && (rng() < D.revProb + 0.05 * level || phrasesSinceRev >= 5);
+      if (doSpeed || doRev) {
+        if (doRev) dir = -dir;
+        if (doSpeed) {
+          const f = D.speedUp[0] + rng() * (D.speedUp[1] - D.speedUp[0]);
+          let nt = snap(Math.max(D.minTravel, travel / f));
+          if (nt >= travel) nt = Math.max(D.minTravel, travel - bd / 2);
+          travel = nt; speedLevel++;
+          nextSpeedUp = tp + 24 + rng() * 14;
+        }
+        // las llegadas viejas deben acabar antes del cambio
+        while (clusters.length && clusters[clusters.length - 1].lastArr > tp - CLEAR) {
+          const c = clusters.pop();
+          events.splice(events.length - c.members.length, c.members.length);
+        }
+        recomputeTail();
+        blockUntil = tp + travel + 0.35;
+        changes.push({ t: tp, dir, travel, v: (PHYS.SPAWN_ARC * PHYS.R) / travel, rev: doRev, speed: doSpeed, level: speedLevel });
+        phrasesSinceRev = doRev ? 0 : phrasesSinceRev + 1;
+      } else phrasesSinceRev++;
+    }
+
+    const v = (PHYS.SPAWN_ARC * PHYS.R) / travel;
+    const halfMode = tp > 20 && rng() < D.half * (0.14 + 0.1 * level);
+    const thr = [0.62, 0.5, 0.41, 0.33][level] + D.thr;
+    const pN = notes.filter((x) => x.t >= Math.max(firstT, blockUntil, tp) && x.t < tEnd && x.t <= lastT);
+    const after = (t0, a, b, minS) => {
+      let best = null;
+      for (const x of notes) {
+        if (x.t < t0 + a) continue;
+        if (x.t > t0 + b) break;
+        if (x.s >= minS && (!best || x.score > best.score)) best = x;
+      }
+      return best;
+    };
+
+    for (let ni = 0; ni < pN.length; ni++) {
+      const note = pN[ni];
+      if (note.score < thr) continue;
+      if (note.t < lastArr + 0.22) continue;
+      if (rng() < D.skip * (1 - Math.min(1, note.s))) continue;
+      // ---- patrón: 1, 2 o 3 obstáculos siguiendo las notas
+      const r = rng();
+      const p3 = D.pat3 * [0, 0.06, 0.13, 0.22][level];
+      const p2 = D.pat2 * [0.12, 0.26, 0.34, 0.4][level];
+      const want = r < p3 ? 3 : r < p3 + p2 ? 2 : 1;
+      let members = [note];
+      while (members.length < want) {
+        const lst = members[members.length - 1];
+        const c = after(lst.t, MIN_SEP, 0.62, thr * 0.7);
+        if (!c || c.t - note.t > 1.3 || c.t > lastT) break;
+        members.push(c);
+      }
+      // carriles
+      let lanes;
+      if (halfMode) {
+        const L = rng() < 0.5 ? 'front' : 'back', O = L === 'front' ? 'back' : 'front';
+        const style = members.length === 1 ? (rng() < 0.75 ? 'same' : 'all') : ['same', 'alt', 'mixed'][Math.floor(rng() * 3)];
+        lanes = members.map((_, j) => style === 'all' ? 'all' : style === 'same' ? L : style === 'alt' ? (j % 2 ? O : L) : (j === 0 ? 'all' : L));
+      } else lanes = members.map(() => 'all');
+
+      // formas
+      const sizes = members.map((m) => {
+        if (members.length === 1) {
+          const big = Math.min(1, m.s * 0.8 + rng() * 0.4) * D.sizeMul;
+          return { w: Math.min(1, big * (0.5 + rng() * 0.6)), h: Math.min(1, big * (0.5 + rng() * 0.6)) };
+        }
+        return { w: 0.1 + rng() * 0.35, h: 0.15 + rng() * 0.4 };
+      });
+      const kinds = members.map(() => {
+        let k; do { k = KIND_LIST[Math.floor(rng() * KIND_LIST.length)]; } while (k === prevKind && KIND_LIST.length > 1);
+        prevKind = k; return k;
+      });
+
+      let ok = false, plans = null, shapes = null, tries = 0;
+      while (!ok && members.length && tries++ < 10) {
+        shapes = members.map((m, j) => makeObstacleShape(kinds[j], sizes[j].w, sizes[j].h));
+        plans = {};
+        let fitFail = false, gapFail = false;
+        for (const L of LANES) {
+          const obs = [];
+          members.forEach((m, j) => { if (laneHits(lanes[j], L)) obs.push({ dt: m.t - note.t, prims: shapes[j].prims }); });
+          if (!obs.length) { plans[L] = null; continue; }
+          const pl = planCluster(obs, v);
+          if (!pl.ok || pl.window < D.minWindow) { fitFail = true; break; }
+          if (note.t + pl.from < prevLand[L] + 0.05 || note.t + pl.t0 < prevLand[L] + 0.2) { gapFail = true; break; }
+          plans[L] = pl;
+        }
+        if (!fitFail && !gapFail) { ok = true; break; }
+        if (gapFail || tries > 3) {
+          // simplifica: quita la última nota del grupo
+          members = members.slice(0, -1); lanes = lanes.slice(0, -1); sizes.pop(); kinds.pop();
+        } else sizes.forEach((s) => { s.w *= 0.75; s.h *= 0.8; });
+      }
+      if (!ok || !members.length) continue;
+
+      const cid = clusters.length;
+      const cl = { id: cid, anchor: note.t, dir, v, travel, plans, members: [], lastArr: members[members.length - 1].t, accent: note.s };
+      members.forEach((m, j) => {
+        const sh = shapes[j];
+        const ev = {
+          id: 0, tArr: m.t, tSpawn: m.t - travel, dir, v, travel,
+          kind: sh.kind, w: sh.w, h: sh.h, prims: sh.prims, lane: lanes[j],
+          cluster: cid, ci: j, accent: m.s, seed: Math.floor(rng() * 1e9),
+        };
+        events.push(ev); cl.members.push(ev);
+      });
+      clusters.push(cl);
+      for (const L of LANES) if (plans[L]) prevLand[L] = note.t + plans[L].land;
+      lastArr = cl.lastArr;
+      while (ni + 1 < pN.length && pN[ni + 1].t <= cl.lastArr) ni++;
+    }
+  }
+  events.forEach((e, i) => { e.id = i; });
+  clusters.forEach((c, i) => { c.id = i; c.members.forEach((e) => { e.cluster = i; }); });
+  return {
+    events, clusters, changes, reversals: changes, sections,
+    bpm: an.bpm, beatDur: bd, beats, duration, downbeatPhase: phase0, difficulty: opts.difficulty || 'normal',
+  };
+}
+
 /** Sentido de la rueda en el tiempo t. */
 export function dirAt(chart, t) {
-  let d = chart.reversals[0].dir;
-  for (const r of chart.reversals) { if (r.t <= t) d = r.dir; else break; }
+  let d = chart.changes[0].dir;
+  for (const r of chart.changes) { if (r.t <= t) d = r.dir; else break; }
   return d;
+}
+/** Tramo de velocidad vigente en t. */
+export function changeAt(chart, t) {
+  let c = chart.changes[0];
+  for (const r of chart.changes) { if (r.t <= t) c = r; else break; }
+  return c;
 }

@@ -1,29 +1,56 @@
 // =====================================================================
 //  GATO SWING · Física compartida (juego + generador de ritmo + tests)
 //  Todas las medidas en "unidades de mundo". El radio de la rueda (cabeza
-//  del gato) es R. El jugador siempre está en s = 0 (la cima de la cabeza);
-//  "s" es la distancia a lo largo de la superficie (+ = derecha).
+//  del gato) es R. "s" es la distancia a lo largo de la superficie.
+//
+//  Salto "flotante" de caricatura (~1,1 s en el aire) + DOBLE SALTO.
+//  Una trayectoria es una lista de tramos {t, h, v}: despegue en t con
+//  altura h y velocidad vertical v. El doble salto agrega un segundo tramo.
 // =====================================================================
 
 export const PHYS = {
   R: 7.5,             // radio de la cabeza-rueda
   DEPTH: 4.4,         // grosor de la rueda (carriles de jugadores en z)
-  G: 60,              // gravedad
-  JUMP_V: 17.5,       // velocidad inicial de salto
+  G: 16.5,            // gravedad (baja = más "vuelo")
+  JUMP_V: 8.9,        // velocidad del primer salto
+  DJ_V: 6.6,          // velocidad del doble salto
+  DJ_MIN: 0.08,       // tiempo mínimo en el aire antes de poder hacer doble salto
   PLAYER_HALF_W: 0.26,// mitad del ancho del hitbox del jugador (más angosto que el modelo = justo)
   PLAYER_H: 1.25,     // alto del hitbox del jugador
   SPAWN_ARC: 1.3,     // ángulo (rad) desde la cima donde aparecen los obstáculos
   EXIT_ARC: 0.75,     // ángulo (rad) pasado el jugador donde desaparecen (puf)
   STEP: 1 / 240,      // paso fijo de simulación de colisiones
-  JUMP_BUFFER: 0.12,  // si presionas saltar justo antes de aterrizar, se guarda
+  JUMP_BUFFER: 0.15,  // si presionas saltar justo antes de aterrizar, se guarda
 };
-PHYS.AIR_TIME = (2 * PHYS.JUMP_V) / PHYS.G;               // ≈ 0.583 s
-PHYS.APEX = (PHYS.JUMP_V * PHYS.JUMP_V) / (2 * PHYS.G);    // ≈ 2.55 u
+PHYS.AIR_TIME = (2 * PHYS.JUMP_V) / PHYS.G;                         // ≈ 1,08 s
+PHYS.APEX = (PHYS.JUMP_V * PHYS.JUMP_V) / (2 * PHYS.G);              // ≈ 2,4 u
+PHYS.DJ_EXTRA = (PHYS.DJ_V * PHYS.DJ_V) / (2 * PHYS.G);              // ≈ +1,3 u
 
-/** Altura de los pies `dt` segundos después de despegar (0 si ya aterrizó). */
-export function jumpHeight(dt) {
-  if (dt <= 0 || dt >= PHYS.AIR_TIME) return 0;
-  return PHYS.JUMP_V * dt - 0.5 * PHYS.G * dt * dt;
+// ------------------------------------------------------------ trayectorias
+export function segHeight(seg, t) {
+  const dt = t - seg.t;
+  return seg.h + seg.v * dt - 0.5 * PHYS.G * dt * dt;
+}
+/** Momento en que la trayectoria vuelve al suelo. */
+export function landTime(segs) {
+  const s = segs[segs.length - 1];
+  return s.t + (s.v + Math.sqrt(s.v * s.v + 2 * PHYS.G * s.h)) / PHYS.G;
+}
+/** Altura de los pies en el tiempo t (0 en el suelo). */
+export function heightAt(segs, t) {
+  if (!segs || !segs.length || t <= segs[0].t) return 0;
+  let s = segs[0];
+  for (let i = 1; i < segs.length; i++) if (segs[i].t <= t) s = segs[i];
+  const h = segHeight(s, t);
+  return h > 0 ? h : 0;
+}
+/** Crea una trayectoria: salto en t0 y (opcional) doble salto en t1. */
+export function makeTraj(t0, t1) {
+  const segs = [{ t: t0, h: 0, v: PHYS.JUMP_V }];
+  if (t1 !== null && t1 !== undefined && t1 >= t0 + PHYS.DJ_MIN && t1 < landTime(segs)) {
+    segs.push({ t: t1, h: segHeight(segs[0], t1), v: PHYS.DJ_V });
+  }
+  return segs;
 }
 
 // ---------------------------------------------------------------------
@@ -80,34 +107,90 @@ export function profileBounds(prims) {
   }
   return { x0, x1, h };
 }
+export function reachOf(prims) {
+  const b = profileBounds(prims);
+  return Math.max(-b.x0, b.x1) + PHYS.PLAYER_HALF_W + 0.02;
+}
 
 /**
- * Ventana de salto: prueba todos los momentos de despegue posibles alrededor
- * de la llegada y devuelve el rango continuo más largo que esquiva el obstáculo.
- * Usa exactamente la misma función de colisión que el juego.
- *   v   = velocidad del obstáculo (u/s)
- *   return {window, best, from, to} en segundos relativos a la llegada.
+ * ¿La trayectoria esquiva todos los obstáculos del grupo?
+ * obs = [{dt, prims, reach}]: dt = llegada relativa al ancla (t = 0).
  */
-export function jumpWindow(prims, v) {
-  const b = profileBounds(prims);
-  const reach = Math.max(-b.x0, b.x1) + PHYS.PLAYER_HALF_W + 0.05;
-  const tIn = -reach / v - 0.02, tOut = reach / v + 0.02; // tiempo en que hay solapamiento horizontal posible
-  let bestLen = 0, bestFrom = 0, bestTo = 0, curFrom = null;
-  const dTau = 0.004;
-  for (let tau = -PHYS.AIR_TIME - 0.1; tau <= 0.25; tau += dTau) {
-    let ok = true;
-    for (let t = tIn; t <= tOut; t += PHYS.STEP) {
-      const s = -v * (0 - t); // el obstáculo viaja hacia +s y pasa por 0 en t=0 (simétrico)
-      const feet = jumpHeight(t - tau);
-      if (hitTest(s, feet, prims)) { ok = false; break; }
-    }
-    if (ok) { if (curFrom === null) curFrom = tau; }
-    else if (curFrom !== null) {
-      const len = tau - dTau - curFrom;
-      if (len > bestLen) { bestLen = len; bestFrom = curFrom; bestTo = tau - dTau; }
-      curFrom = null;
+export function trajClears(segs, obs, v, step, margin = 0) {
+  for (let k = 0; k < obs.length; k++) {
+    const o = obs[k];
+    const a = o.dt - o.reach / v - step, b = o.dt + o.reach / v + step;
+    for (let t = a; t <= b; t += step) {
+      if (hitTest(v * (t - o.dt), heightAt(segs, t) - margin, o.prims)) return false;
     }
   }
-  if (curFrom !== null) { const len = 0.25 - curFrom; if (len > bestLen) { bestLen = len; bestFrom = curFrom; bestTo = 0.25; } }
-  return { window: bestLen, from: bestFrom, to: bestTo, best: (bestFrom + bestTo) / 2 };
+  return true;
+}
+
+/**
+ * Planificador de saltos para un GRUPO de obstáculos (1, 2 o 3 seguidos).
+ * Prueba todos los despegues posibles y, si hace falta, todos los momentos
+ * de doble salto. Devuelve la ventana continua más larga de despegues que
+ * funcionan y el mejor plan {t0, t1|null}. Tiempos relativos al ancla.
+ */
+export function planCluster(obs, v) {
+  obs = obs.map((o) => Object.assign({ reach: reachOf(o.prims) }, o));
+  const first = Math.min(...obs.map((o) => o.dt - o.reach / v));
+  const t0From = first - PHYS.AIR_TIME - 0.15, t0To = first + 0.05;
+  const coarse = 1 / 160;
+  const results = [];
+  for (let t0 = t0From; t0 <= t0To; t0 += 0.01) {
+    let plan = null;
+    if (trajClears(makeTraj(t0, null), obs, v, coarse)) plan = { t0, t1: null, djWin: 0 };
+    else {
+      // buscar el rango de doble salto que funciona
+      const land = t0 + PHYS.AIR_TIME;
+      let run = null, best = null;
+      for (let t1 = t0 + PHYS.DJ_MIN + 0.02; t1 < land - 0.04; t1 += 0.025) {
+        if (trajClears(makeTraj(t0, t1), obs, v, coarse)) { if (!run) run = { a: t1, b: t1 }; else run.b = t1; }
+        else if (run) { if (!best || run.b - run.a > best.b - best.a) best = run; run = null; }
+      }
+      if (run && (!best || run.b - run.a > best.b - best.a)) best = run;
+      if (best && best.b - best.a >= 0.1) plan = { t0, t1: (best.a + best.b) / 2, djWin: best.b - best.a };
+    }
+    results.push(plan);
+  }
+  // ventana continua más larga
+  let bestRun = null, cur = null;
+  results.forEach((p, i) => {
+    if (p) { if (!cur) cur = { a: i, b: i }; else cur.b = i; }
+    else if (cur) { if (!bestRun || cur.b - cur.a > bestRun.b - bestRun.a) bestRun = cur; cur = null; }
+  });
+  if (cur && (!bestRun || cur.b - cur.a > bestRun.b - bestRun.a)) bestRun = cur;
+  if (!bestRun) return { ok: false, window: 0 };
+  // El mejor despegue: centro del tramo más largo de UN SOLO TIPO (salto simple
+  // o con doble salto) dentro de la ventana, lejos de los bordes; se verifica
+  // con el paso fino del juego y 6 cm de margen de seguridad.
+  const typed = [];
+  let tc = null;
+  for (let i = bestRun.a; i <= bestRun.b; i++) {
+    const dj = results[i].t1 !== null;
+    if (tc && tc.dj === dj) tc.b = i; else { tc = { a: i, b: i, dj }; typed.push(tc); }
+  }
+  typed.sort((x, y) => (y.b - y.a) - (x.b - x.a));
+  const single = typed.find((x) => !x.dj);
+  let pick = typed[0];
+  if (single && (single.b - single.a) >= 0.6 * (pick.b - pick.a)) pick = single; // preferir salto simple
+  const mid = Math.round((pick.a + pick.b) / 2);
+  const order = [mid];
+  for (let d = 1; d <= pick.b - pick.a; d++) order.push(mid - d, mid + d);
+  for (const i of order) {
+    if (i < pick.a || i > pick.b) continue;
+    const p = results[i];
+    const segs = makeTraj(p.t0, p.t1);
+    if (trajClears(segs, obs, v, PHYS.STEP / 2, 0.06)) {
+      return {
+        ok: true,
+        window: (bestRun.b - bestRun.a) * 0.01,
+        from: results[bestRun.a].t0, to: results[bestRun.b].t0,
+        t0: p.t0, t1: p.t1, djWin: p.djWin, land: landTime(segs),
+      };
+    }
+  }
+  return { ok: false, window: 0 };
 }

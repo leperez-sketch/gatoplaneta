@@ -3,18 +3,18 @@
 //    node tests/chart.test.mjs audio.f32      (PCM float32 mono 11025 Hz)
 //  Generar el .f32:  ffmpeg -i assets/audio/ww.mp3 -ac 1 -ar 11025 -f f32le ww.f32
 //
-//  Verifica para cada dificultad:
-//   - que TODO obstáculo tenga una ventana de salto ≥ mínimo (física real),
-//   - separación mínima entre llegadas,
-//   - que un jugador que salta en el centro de cada ventana sobreviva toda
-//     la canción en CUALQUIER posición del grupo (6 jugadores),
-//   - que un jugador que no salta muera en el primer obstáculo,
-//   - que cada llegada caiga en un beat o subdivisión para todos.
+//  Verifica para cada dificultad y varias semillas:
+//   - que todo grupo tenga una ventana de despegue ≥ mínimo (física real),
+//   - que un jugador que sigue el plan (con doble salto cuando hace falta)
+//     sobreviva TODA la canción en cualquier posición y carril (6 jugadores),
+//   - que un jugador que no salta muera,
+//   - que cada llegada caiga en una subdivisión musical para todos,
+//   - y reporta variedad: patrones de 1/2/3, medio carril, aceleraciones.
 // =====================================================================
 import fs from 'fs';
 import { analyzeBeats } from '../js/host/beat-analysis.js';
-import { generateChart, playerSpacing, dirAt } from '../js/host/chart.js';
-import { PHYS, hitTest, jumpHeight } from '../js/host/physics.js';
+import { generateChart, playerSpacing, changeAt, laneHits } from '../js/host/chart.js';
+import { PHYS, hitTest, heightAt, makeTraj, landTime } from '../js/host/physics.js';
 
 const f = process.argv[2];
 if (!f) { console.log('uso: node tests/chart.test.mjs audio.f32'); process.exit(2); }
@@ -22,63 +22,74 @@ const buf = fs.readFileSync(f);
 const mono = new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4);
 let t0 = Date.now();
 const an = analyzeBeats(mono, 11025);
-console.log('BPM', an.bpm, 'beats', an.beats.length, 'downbeat', an.downbeatPhase, 'dur', an.duration.toFixed(1), 'ms', Date.now() - t0);
+console.log('BPM', an.bpm, 'beats', an.beats.length, 'dur', an.duration.toFixed(1), 'análisis ms', Date.now() - t0);
+console.log('aire', PHYS.AIR_TIME.toFixed(2), 's · altura', PHYS.APEX.toFixed(2), '+ doble', PHYS.DJ_EXTRA.toFixed(2));
 
 const N = 6;
 let fail = 0;
 for (const diff of ['facil', 'normal', 'dificil']) {
-  const ch = generateChart(an, { difficulty: diff, seed: 42 });
-  const ev = ch.events;
-  let minW = 9, minGap = 9;
-  for (let i = 0; i < ev.length; i++) { minW = Math.min(minW, ev[i].window); if (i) minGap = Math.min(minGap, ev[i].tArr - ev[i - 1].tArr); }
+  for (const seed of [42, 7, 2024]) {
+    t0 = Date.now();
+    const ch = generateChart(an, { difficulty: diff, seed });
+    const ms = Date.now() - t0;
+    const ev = ch.events;
+    const minW = Math.min(...ch.clusters.flatMap((c) => ['front', 'back'].map((l) => c.plans[l] ? c.plans[l].window : 9)));
+    const phaseAt = (t) => { const c = changeAt(ch, t); return Object.assign({}, c, playerSpacing(c.v, ch.beatDur, N)); };
 
-  // posiciones de los jugadores por fase (igual que el juego)
-  const phases = ch.reversals.map((r, i) => {
-    const first = ev.find((e) => e.tArr > Math.max(0, r.t)) || ev[0];
-    const { spacing, sub } = playerSpacing(first.v, ch.beatDur, N);
-    return { from: r.t, spacing, sub };
-  });
-  const phaseAt = (t) => { let p = phases[0]; for (const q of phases) if (q.from <= t) p = q; return p; };
-
-  let deaths = 0, offBeat = 0;
-  for (let k = 0; k < N && !deaths; k++) {
-    const slot = k - Math.floor((N - 1) / 2); // posiciones enteras: cada una cae en subdivisión
-    const sAt = (t) => slot * phaseAt(t).spacing;
-    // plan de saltos: llegada a MI posición + mejor despegue
-    const plan = ev.map((e) => {
-      const ph = phaseAt(e.tArr);
-      const s = slot * ph.spacing;
-      const arr = e.tArr + e.dir * s / e.v;
-      // ¿cae en subdivisión del beat?
-      const frac = (e.dir * s / e.v) / (ch.beatDur * (ph.sub || 1));
-      if (ph.sub && Math.abs(frac - Math.round(frac)) > 0.02) offBeat++;
-      return arr + e.bestTau;
-    }).sort((a, b) => a - b);
-    let jumpT = -99, pi = 0;
-    for (let t = 0; t < ch.duration; t += PHYS.STEP) {
-      while (pi < plan.length && plan[pi] <= t) {
-        if (t - jumpT >= PHYS.AIR_TIME - 1e-9) jumpT = plan[pi]; else { console.log('  ', diff, 'jugador', k, 'no aterrizó a tiempo', plan[pi].toFixed(2)); deaths++; }
-        pi++;
+    let deaths = 0, offBeat = 0, lazyAlive = 0;
+    for (let k = 0; k < N && !deaths; k++) {
+      const slot = k - Math.floor((N - 1) / 2);
+      const lane = k % 2 ? 'back' : 'front';
+      // plan de saltos de este jugador
+      const jumps = [];
+      for (const c of ch.clusters) {
+        const pl = c.plans[lane];
+        const ph = phaseAt(c.anchor);
+        const off = c.dir * slot * ph.spacing / c.v;
+        if (ph.sub) { const fr = off / (ch.beatDur * ph.sub); if (Math.abs(fr - Math.round(fr)) > 0.02) offBeat++; }
+        if (!pl) continue;
+        jumps.push({ t0: c.anchor + off + pl.t0, t1: pl.t1 === null ? null : c.anchor + off + pl.t1 });
       }
-      const feet = jumpHeight(t - jumpT);
-      const sp = sAt(t);
+      let ji = 0, traj = null;
+      const sAt = (t) => slot * phaseAt(t).spacing;
+      for (let t = 0; t < ch.duration; t += PHYS.STEP) {
+        if (traj && t >= landTime(traj)) traj = null;
+        if (ji < jumps.length && t >= jumps[ji].t0) {
+          if (traj) { console.log('   ', diff, seed, 'jugador', k, 'no aterrizó a tiempo para el salto', ji); deaths++; break; }
+          traj = makeTraj(jumps[ji].t0, jumps[ji].t1); ji++;
+        }
+        const feet = heightAt(traj, t);
+        const sp = sAt(t);
+        for (const e of ev) {
+          if (t < e.tSpawn || t > e.tArr + 2 || !laneHits(e.lane, lane)) continue;
+          const s = -e.dir * e.v * (e.tArr - t) - sp;
+          if (Math.abs(s) < 3 && hitTest(s, feet, e.prims)) { deaths++; console.log('   ', diff, seed, 'jugador', k, lane, 'golpe', e.id, e.kind, t.toFixed(3)); break; }
+        }
+        if (deaths) break;
+      }
+      // sin saltar: debe morir
+      let hit = false;
       for (const e of ev) {
-        if (t < e.tSpawn || t > e.tArr + 2) continue;
-        const s = -e.dir * e.v * (e.tArr - t) - sp;
-        if (hitTest(s, feet, e.prims)) { deaths++; console.log('  ', diff, 'jugador', k, 'golpe', e.id, e.kind, t.toFixed(3)); break; }
+        if (!laneHits(e.lane, lane)) continue;
+        for (let t = e.tArr - 0.3; t < e.tArr + 0.3 && !hit; t += PHYS.STEP) if (hitTest(-e.dir * e.v * (e.tArr - t), 0, e.prims)) hit = true;
+        break;
       }
-      if (deaths) break;
+      if (!hit) lazyAlive++;
     }
+    // variedad
+    const sizes = [0, 0, 0, 0]; ch.clusters.forEach((c) => sizes[c.members.length]++);
+    const half = ev.filter((e) => e.lane !== 'all').length;
+    const dj = ch.clusters.filter((c) => (c.plans.front && c.plans.front.t1 !== null) || (c.plans.back && c.plans.back.t1 !== null)).length;
+    const gaps = []; for (let i = 1; i < ch.clusters.length; i++) gaps.push(ch.clusters[i].anchor - ch.clusters[i - 1].anchor);
+    const mean = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+    const cv = Math.sqrt(gaps.reduce((a, b) => a + (b - mean) ** 2, 0) / gaps.length) / mean;
+    const speeds = ch.changes.filter((c) => c.speed).map((c) => c.t.toFixed(0) + 's');
+    const revs = ch.changes.filter((c) => c.rev).length;
+    console.log(`${diff.padEnd(7)} s${String(seed).padEnd(4)} obst ${ev.length} grupos 1/2/3: ${sizes[1]}/${sizes[2]}/${sizes[3]} · doble salto ${dj} · medio carril ${half} · ` +
+      `variación de ritmo ${(cv * 100).toFixed(0)}% · acelera en ${speeds.join(',')} · cambios de sentido ${revs} · v ${ch.changes[0].v.toFixed(1)}→${ch.changes[ch.changes.length - 1].v.toFixed(1)} · ` +
+      `ventana mín ${minW.toFixed(2)} · ${ms} ms | muertes plan perfecto: ${deaths} · fuera de ritmo: ${offBeat} · sobrevive sin saltar: ${lazyAlive}`);
+    if (deaths || offBeat || lazyAlive) fail++;
   }
-  let lazyHit = false; const e0 = ev[0];
-  for (let t = e0.tSpawn; t < e0.tArr + 0.5; t += PHYS.STEP) if (hitTest(-e0.dir * e0.v * (e0.tArr - t), 0, e0.prims)) { lazyHit = true; break; }
-  const kinds = {}; ev.forEach((e) => kinds[e.kind] = (kinds[e.kind] || 0) + 1);
-  console.log(diff.padEnd(8), 'obst', ev.length, 'cambios', ch.reversals.length - 1, 'minVentana', minW.toFixed(3), 'minSep', minGap.toFixed(3),
-    'v', ev[0].v.toFixed(2) + '→' + Math.max(...ev.map((e) => e.v)).toFixed(2),
-    'separación', phases.map((p) => p.spacing.toFixed(2) + '(' + p.sub + ')').join(' '),
-    '| muertes jugador perfecto:', deaths, '| sin saltar muere:', lazyHit, '| fuera de ritmo:', offBeat);
-  console.log('         ', JSON.stringify(kinds));
-  if (deaths || !lazyHit || offBeat || minGap < PHYS.AIR_TIME + 0.2) fail++;
 }
 console.log(fail ? 'FALLÓ' : 'TODO OK');
 process.exit(fail ? 1 : 0);
