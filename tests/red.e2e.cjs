@@ -64,6 +64,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   console.log('celulares de vuelta tras', ((Date.now() - t0) / 1000).toFixed(1), 's:', await host.evaluate(() => [...game.players.values()].map((p) => p.name + (p.connected ? '✓' : '✗')).join(', ')));
   // ---- partida: A salta en ritmo según el host (trampa de test: usa el plan perfecto), B no salta
   await host.waitForFunction(() => document.getElementById('song-info').textContent.includes('lista'), null, { timeout: 90000 });
+  // regresión: saltar en el lobby tras un rato no debe bloquear los saltos en la partida
+  await host.evaluate(() => { game.lobbyClock += 300; });
+  await phones[0].p.tap('#btn-jump');
+  await sleep(300);
   await host.evaluate(() => { game.difficulty = 'facil'; const b = game.addBot(); b.skill = 1; game.startMatch(); });
   await host.waitForFunction(() => game.state === 'playing', null, { timeout: 20000 });
   const keyA2 = keyA;

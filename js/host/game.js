@@ -244,8 +244,11 @@ export class Game {
   jump(p, tPress) {
     if (!p || p.waiting) return;
     const now = this.nowSong();
-    if (now - p.lastJumpReq < 0.05) return; // anti-spam
-    p.lastJumpReq = now;
+    // anti-spam con reloj real (NO con el reloj de la canción: el del lobby
+    // es distinto y bloqueaba todos los saltos al empezar la partida)
+    const real = performance.now();
+    if (real - p.lastJumpReq < 50) return;
+    p.lastJumpReq = real;
     if (this.state !== 'playing') { // en el lobby: salto de prueba
       if (p.t0 === null) { p.t0 = now; this.audio.jump(); p.actor.kick(-2.5); }
       return;
@@ -302,7 +305,7 @@ export class Game {
     this.audio.unlock();
     this.players.forEach((p) => {
       p.waiting = false; p.alive = true; p.score = 0; p.combo = 0; p.maxCombo = 0; p.cleared = 0; p.perfects = 0; p.place = 0;
-      p.t0 = null; p.landT = -99; p.buffered = false; p.pending = null; p.ko = null; p.elimT = null;
+      p.t0 = null; p.landT = -99; p.buffered = false; p.pending = null; p.ko = null; p.elimT = null; p.lastJumpReq = 0;
       p.actor.group.visible = true; p.actor.bodyPivot.rotation.set(0, 0, 0); p.actor.facing.rotation.x = 0; p.actor.group.scale.setScalar(1);
       p.passedSet = new Set();
     });
