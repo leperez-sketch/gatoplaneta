@@ -330,6 +330,18 @@ export class CharacterActor {
         legT.push({ x: (i ? 0.12 : -0.18) * (up ? 1 : 0.5), y: L * (up ? 0.5 : 0.25) });
         armT.push({ x: 0.08, y: r.armLen * (up ? 0.85 : 0.6), z: (i ? 1 : -1) * r.armLen * 0.35 });
       }
+    } else if (st.mode === 'grind') {
+      // postura de skater: piernas abiertas (una adelante, otra atrás), rodillas
+      // flexionadas, brazos abiertos haciendo equilibrio
+      this.cycle += dt * 9;
+      const wob = Math.sin(this.cycle) * 0.12;
+      bob = -0.06 + Math.sin(this.cycle * 2) * 0.015;
+      lean = 0.05 + wob * 0.3;
+      legT.push({ x: -0.32, y: 0.04 });
+      legT.push({ x: 0.3, y: 0.02 });
+      for (let i = 0; i < 2; i++) {
+        armT.push({ x: (i ? 0.15 : -0.15), y: r.armLen * (0.15 + (i ? wob : -wob)), z: (i ? 1 : -1) * r.armLen * 0.85 });
+      }
     } else if (st.mode === 'ko') {
       this.koSpin += dt * 14;
       for (let i = 0; i < 2; i++) {

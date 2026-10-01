@@ -21,6 +21,12 @@ export const PHYS = {
   EXIT_ARC: 0.75,     // ángulo (rad) pasado el jugador donde desaparecen (puf)
   STEP: 1 / 240,      // paso fijo de simulación de colisiones
   JUMP_BUFFER: 0.15,  // si presionas saltar justo antes de aterrizar, se guarda
+  // ---- barandas para patinar (notas largas)
+  RAIL_H: 1.55,       // altura de la baranda
+  SPIKE_H: 0.5,       // pinchos debajo de la baranda
+  POP_V: 6.0,         // saltito automático al terminar la baranda
+  SLIP_GRACE: 0.28,   // s que puedes soltar el botón antes de resbalar
+  POST_HW: 0.07,      // medio ancho del poste de la baranda
 };
 PHYS.AIR_TIME = (2 * PHYS.JUMP_V) / PHYS.G;                         // ≈ 1,08 s
 PHYS.APEX = (PHYS.JUMP_V * PHYS.JUMP_V) / (2 * PHYS.G);              // ≈ 2,4 u
@@ -193,4 +199,77 @@ export function planCluster(obs, v) {
     }
   }
   return { ok: false, window: 0 };
+}
+
+// ---------------------------------------------------------------------
+//  BARANDAS (grind). Una baranda llega con su frente en t = 0 y su cola
+//  pasa por el jugador en tEnd = L / v. Debajo hay pinchos.
+//  Perfil en coordenadas del obstáculo (frente en x = 0, cuerpo hacia atrás
+//  según el sentido `dir`): poste delantero + pinchos + poste trasero.
+// ---------------------------------------------------------------------
+export function railPrims(L, dir) {
+  const prims = [];
+  const hw = PHYS.POST_HW;
+  prims.push({ t: 'box', x0: -hw, x1: hw, y0: 0, y1: PHYS.RAIL_H });              // poste delantero
+  const sw = 0.55, n = Math.max(1, Math.floor((L - 0.2) / sw));
+  for (let k = 0; k < n; k++) {
+    const c = -dir * (0.1 + sw / 2 + k * sw);
+    prims.push({ t: 'tri', x0: c - sw / 2, x1: c + sw / 2, y0: 0, y1: PHYS.SPIKE_H }); // pinchos
+  }
+  const e = -dir * L;
+  prims.push({ t: 'box', x0: e - hw, x1: e + hw, y0: 0, y1: PHYS.RAIL_H });       // poste trasero
+  return prims;
+}
+/** ¿El jugador (en rel = s_obs - s_jugador) está encima de la baranda? */
+export function overRail(rel, L, dir) {
+  const a = rel, b = rel - dir * L;
+  const lo = Math.min(a, b), hi = Math.max(a, b);
+  return 0 >= lo - 0.05 && 0 <= hi + 0.05;
+}
+export function popAirTime() {
+  const v = PHYS.POP_V, h = PHYS.RAIL_H;
+  return (v + Math.sqrt(v * v + 2 * PHYS.G * h)) / PHYS.G;
+}
+
+/**
+ * Plan para subirse a una baranda: despegues t0 (relativos a la llegada del
+ * frente) con los que pasas sobre el poste y bajas ENCIMA de la baranda
+ * antes de que termine. Luego patinas hasta el final y sale el saltito.
+ */
+export function planRail(L, v) {
+  const tEnd = L / v;
+  const postR = PHYS.POST_HW + PHYS.PLAYER_HALF_W + 0.02;
+  const prims = railPrims(L, 1);
+  const results = [];
+  for (let t0 = -PHYS.AIR_TIME - 0.2; t0 <= 0.15; t0 += 0.01) {
+    const segs = makeTraj(t0, null);
+    let ok = true;
+    // 1) pasar por encima del poste delantero (y de los pinchos mientras tanto)
+    for (let t = -postR / v - PHYS.STEP; t <= postR / v + PHYS.STEP; t += PHYS.STEP) {
+      if (hitTest(v * t, heightAt(segs, t), prims)) { ok = false; break; }
+    }
+    // 2) bajar sobre la baranda (cruzar RAIL_H descendiendo) antes del final
+    let tc = null;
+    if (ok) {
+      for (let t = postR / v; t < tEnd; t += PHYS.STEP) {
+        const h = heightAt(segs, t);
+        if (h < PHYS.RAIL_H) { tc = t; break; }
+      }
+      if (tc === null || tc > tEnd - 0.25) ok = false;
+    }
+    results.push(ok ? { t0, tc } : null);
+  }
+  let best = null, cur = null;
+  results.forEach((p, i) => {
+    if (p) { if (!cur) cur = { a: i, b: i }; else cur.b = i; }
+    else if (cur) { if (!best || cur.b - cur.a > best.b - best.a) best = cur; cur = null; }
+  });
+  if (cur && (!best || cur.b - cur.a > best.b - best.a)) best = cur;
+  if (!best) return { ok: false, window: 0 };
+  const mid = results[Math.round((best.a + best.b) / 2)];
+  return {
+    ok: true, rail: true,
+    window: (best.b - best.a) * 0.01, from: results[best.a].t0, to: results[best.b].t0,
+    t0: mid.t0, t1: null, tLand: mid.tc, tEnd, land: tEnd + popAirTime(),
+  };
 }

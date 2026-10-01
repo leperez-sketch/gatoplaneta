@@ -71,6 +71,11 @@ export class CatWheel {
     this.toss = [0, 0]; // animación de lanzamiento de cada pata (0..1)
     this.spinAngle = 0;
     this.time = 0;
+    this.emotion = 'idle';   // idle | joy | vibe | surprised | irritated | angry
+    this.emoT = 0;           // tiempo desde el último cambio de emoción
+    this.anger = 0;          // 0..1 (cara roja)
+    this.puffs = [];         // vapor de las orejas
+    this.notes = [];         // notas musicales (disfrutando)
   }
 
   meow(intensity = 1) { this.mouthTarget = Math.max(this.mouthTarget, intensity); this.setMood('meow', 0.7); }
@@ -95,7 +100,18 @@ export class CatWheel {
     this.mouthTarget = Math.max(0, this.mouthTarget - dt * 1.6);
     if (this.moodT > 0) { this.moodT -= dt; if (this.moodT <= 0) this.mood = 'idle'; }
     for (let i = 0; i < 2; i++) this.toss[i] = Math.max(0, this.toss[i] - dt * 3.2);
+    const em = st.emotion || 'idle';
+    if (em !== this.emotion) { this.emotion = em; this.emoT = 0; }
+    this.emoT += dt;
+    this.anger += ((em === 'angry' ? 1 : 0) - this.anger) * Math.min(1, dt * 3);
     this.drawFace(st);
+  }
+
+  /** Expresión que se dibuja: el maullido feliz no tapa el enojo/irritación. */
+  expr() {
+    const e = this.emotion;
+    if (this.mood === 'meow' && e !== 'angry' && e !== 'irritated' && e !== 'surprised') return 'meow';
+    return e;
   }
 
   // ------------------------------------------------------------- cara
@@ -132,21 +148,54 @@ export class CatWheel {
         g.fill();
       });
     });
+    // enojo: la cara se pone roja
+    if (this.anger > 0.02) { g.fillStyle = `rgba(235,40,30,${0.32 * this.anger})`; g.fillRect(-rad, -rad, rad * 2, rad * 2); }
+    const E = this.expr();
     g.translate(0, bob);
+    // disfrutando: la cabeza (los rasgos) se mece con la música; enojo: tiembla
+    if (E === 'vibe') g.rotate(Math.sin((st.beatIndex + beat) * Math.PI / 2) * 0.06);
+    if (E === 'angry') g.translate((Math.random() - 0.5) * 5, (Math.random() - 0.5) * 3);
+    const pop = Math.min(1, this.emoT / 0.15);
+    if (pop < 1) g.scale(1 + (1 - pop) * 0.06, 1 + (1 - pop) * 0.06);
+    // ---- cejas
+    this.drawBrows(g, E, pulse);
     // ---- ojos
     const eyeY = -215, eyeX = 112;
     const lx = this.look * 18, ly = this.lookY * 14;
-    [-1, 1].forEach((sd) => this.drawEye(g, sd * eyeX, eyeY, sd, lx, ly, pulse));
-    // mejillas (corazones)
-    const hs = 30 * (1 + pulse * 0.25);
-    [-1, 1].forEach((sd) => this.heart(g, sd * 222, -112, hs));
+    [-1, 1].forEach((sd) => this.drawEye(g, sd * eyeX, eyeY, sd, lx, ly, pulse, E));
+    // mejillas
+    if (E === 'angry') {
+      g.fillStyle = 'rgba(200,10,20,0.55)';
+      [-1, 1].forEach((sd) => { g.beginPath(); g.ellipse(sd * 222, -105, 58, 30, 0, 0, Math.PI * 2); g.fill(); });
+    } else if (E !== 'irritated') {
+      const big = E === 'joy' || E === 'meow' || E === 'vibe' ? 1.3 : E === 'surprised' ? 0.75 : 1;
+      const hs = 30 * big * (1 + pulse * (E === 'joy' ? 0.45 : 0.25));
+      [-1, 1].forEach((sd) => this.heart(g, sd * 222, -112, hs));
+    }
     // nariz
     g.fillStyle = PAL.black;
     g.beginPath(); g.moveTo(-26, -122); g.lineTo(26, -122); g.quadraticCurveTo(4, -92, 0, -88); g.quadraticCurveTo(-4, -92, -26, -122); g.fill();
     // boca
     g.lineWidth = 9; g.lineCap = 'round'; g.strokeStyle = PAL.black;
-    const mo = Math.max(this.mouth, st.mouthBase || 0);
-    if (mo > 0.08) {
+    const mo = Math.max(this.mouth, E === 'joy' ? 0.55 : 0);
+    if (E === 'angry' && this.mouth < 0.5) {
+      // dientes apretados
+      g.fillStyle = PAL.white;
+      g.beginPath(); g.moveTo(-70, -78); g.quadraticCurveTo(0, -96, 70, -78); g.lineTo(62, -38); g.quadraticCurveTo(0, -30, -62, -38); g.closePath();
+      g.fill(); g.stroke();
+      g.lineWidth = 5;
+      g.beginPath(); g.moveTo(-66, -58); g.quadraticCurveTo(0, -66, 66, -58); g.stroke();
+      for (let x = -42; x <= 42; x += 21) { g.beginPath(); g.moveTo(x, -84); g.lineTo(x, -36); g.stroke(); }
+    } else if (E === 'surprised' && this.mouth < 0.5) {
+      g.fillStyle = '#5a0614';
+      g.beginPath(); g.ellipse(0, -55, 26, 34, 0, 0, Math.PI * 2); g.fill(); g.stroke();
+    } else if (E === 'irritated' && this.mouth < 0.5) {
+      g.beginPath(); g.moveTo(-55, -62); g.quadraticCurveTo(-25, -70, 0, -60); g.quadraticCurveTo(25, -50, 60, -68); g.stroke();
+    } else if (E === 'vibe' && this.mouth < 0.3) {
+      // sonrisa tranquila, "tarareando"
+      g.beginPath(); g.moveTo(-50, -74); g.quadraticCurveTo(-25, -48, 0, -70); g.quadraticCurveTo(25, -48, 50, -74); g.stroke();
+      g.fillStyle = '#5a0614'; g.beginPath(); g.ellipse(0, -50, 9 + pulse * 4, 11 + pulse * 5, 0, 0, Math.PI * 2); g.fill();
+    } else if (mo > 0.08) {
       const mh = 30 + 70 * mo, mw = 42 + 26 * mo;
       g.fillStyle = '#5a0614';
       g.beginPath();
@@ -178,12 +227,19 @@ export class CatWheel {
     this.faceTex.needsUpdate = true;
   }
 
-  drawEye(g, x, y, sd, lx, ly, pulse) {
+  drawEye(g, x, y, sd, lx, ly, pulse, E) {
     const rx = 84, ry = 112 * (1 + pulse * 0.05);
     g.save(); g.translate(x, y);
     g.lineWidth = 11; g.strokeStyle = PAL.black; g.lineCap = 'round';
-    const mood = this.mood;
-    if (this.blink > 0.4 && mood !== 'meow') {
+    const mood = E || this.mood;
+    if (mood === 'vibe') { // ojos cerrados disfrutando la canción, con pestañas
+      g.lineWidth = 13;
+      g.beginPath(); g.moveTo(-rx * 0.85, 0); g.quadraticCurveTo(0, 55, rx * 0.85, 0); g.stroke();
+      g.lineWidth = 7;
+      [[-0.55, 0.32], [0, 0.42], [0.55, 0.32]].forEach(([a, b]) => { g.beginPath(); g.moveTo(a * rx, b * 60); g.lineTo(a * rx * 1.25, b * 60 + 26); g.stroke(); });
+      g.restore(); return;
+    }
+    if (this.blink > 0.4 && mood !== 'meow' && mood !== 'angry' && mood !== 'surprised') {
       g.beginPath(); g.moveTo(-rx, 10); g.quadraticCurveTo(0, 60, rx, 10); g.stroke();
       g.restore(); return;
     }
@@ -206,8 +262,9 @@ export class CatWheel {
       g.stroke(); g.restore(); return;
     }
     // pupila "pie-eye" con la cuña blanca
-    const pr = mood === 'surprised' ? 0.7 : 1;
-    const px = lx, py = 18 + ly;
+    const pr = mood === 'surprised' ? 0.7 : mood === 'angry' ? 0.62 : mood === 'irritated' ? 0.8 : 1;
+    const side = mood === 'irritated' ? 26 * (this.look >= 0 ? 1 : -1) : 0; // mirada de reojo
+    const px = lx + side, py = 18 + ly + (mood === 'irritated' ? 28 : 0);
     const prx = 58 * pr, pry = 86 * pr;
     const w0 = -1.25, w1 = -0.55; // cuña (ángulos)
     g.fillStyle = PAL.black;
@@ -215,6 +272,54 @@ export class CatWheel {
     g.moveTo(px + Math.cos(w0) * prx * 0.25, py + Math.sin(w0) * pry * 0.25);
     g.ellipse(px, py, prx, pry, 0, w1, w0 + Math.PI * 2);
     g.closePath(); g.fill();
+    if (mood === 'joy') { // brillo extra de alegría
+      g.fillStyle = PAL.white;
+      g.beginPath(); g.arc(px - prx * 0.35, py + pry * 0.45, 11, 0, Math.PI * 2); g.fill();
+    }
+    // párpados: irritado (a media asta) / enojado (inclinado hacia adentro)
+    if (mood === 'irritated' || mood === 'angry') {
+      g.save();
+      g.beginPath(); g.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2); g.clip();
+      // mismo color que la cara (amarillo + el tinte rojo del enojo)
+      const a = 0.32 * this.anger;
+      g.fillStyle = `rgb(${Math.round(255 * (1 - a) + 235 * a)},${Math.round(232 * (1 - a) + 40 * a)},${Math.round(30 * a)})`;
+      g.beginPath();
+      if (mood === 'irritated') { g.rect(-rx - 5, -ry - 5, rx * 2 + 10, ry * 0.95); }
+      else {
+        // párpado inclinado: alto por fuera, bajo hacia la nariz (sin cruzarse)
+        const yR = sd > 0 ? -ry * 0.75 : -ry * 0.05, yL = sd > 0 ? -ry * 0.05 : -ry * 0.75;
+        g.moveTo(-rx - 5, -ry - 5); g.lineTo(rx + 5, -ry - 5); g.lineTo(rx + 5, yR); g.lineTo(-rx - 5, yL); g.closePath();
+      }
+      g.fill();
+      g.lineWidth = 12; g.strokeStyle = PAL.black;
+      g.beginPath();
+      if (mood === 'irritated') { g.moveTo(-rx, -ry * 0.05); g.lineTo(rx, -ry * 0.05); }
+      else { const yR = sd > 0 ? -ry * 0.75 : -ry * 0.05, yL = sd > 0 ? -ry * 0.05 : -ry * 0.75; g.moveTo(rx + 5, yR); g.lineTo(-rx - 5, yL); }
+      g.stroke();
+      g.restore();
+      g.lineWidth = 11; g.strokeStyle = PAL.black;
+      g.beginPath(); g.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2); g.stroke();
+    }
+    g.restore();
+  }
+
+  /** Cejas: el arma secreta de la expresividad en las caricaturas. */
+  drawBrows(g, E, pulse) {
+    g.save();
+    g.strokeStyle = PAL.black; g.lineCap = 'round';
+    [-1, 1].forEach((sd) => {
+      let y = -362, tilt = 0, arch = 22, w = 13;
+      if (E === 'joy' || E === 'meow') { y = -378 - pulse * 8; arch = 30; }
+      else if (E === 'vibe') { y = -352; arch = 16; }
+      else if (E === 'surprised') { y = -395; arch = 34; }
+      else if (E === 'irritated') { if (sd < 0) { y = -335; tilt = 0.05; arch = 4; } else { y = -380; tilt = -0.18; arch = 26; } }
+      else if (E === 'angry') { y = -335; tilt = 0.42; arch = -8; w = 18; }
+      const cx = sd * 112;
+      g.lineWidth = w;
+      g.save(); g.translate(cx, y); g.rotate(sd * tilt);
+      g.beginPath(); g.moveTo(-58, 0); g.quadraticCurveTo(0, -arch, 58, 0); g.stroke();
+      g.restore();
+    });
     g.restore();
   }
 
@@ -298,10 +403,44 @@ export class CatWheel {
       }
     });
 
-    // ---- brazos de manguera con patas
+    // ---- vapor por las orejas (enojo) y notas musicales (disfrutando)
+    const dtb = st.dt || 0.016;
+    const E = this.expr();
+    if (E === 'angry' && Math.random() < 0.35) {
+      const sd = Math.random() < 0.5 ? -1 : 1;
+      const tip = proj(sd * Math.sin(0.78) * (R + 2.6 * k), Math.cos(0.78) * (R + 2.6 * k) + 1.6 * k, zb);
+      this.puffs.push({ x: tip.x, y: tip.y, vx: sd * (20 + Math.random() * 30), vy: -60 - Math.random() * 40, t: 0, life: 0.9, r: unit * (0.35 + Math.random() * 0.3) });
+    }
+    if (E === 'vibe' && Math.random() < 0.06) {
+      const sd = Math.random() < 0.5 ? -1 : 1;
+      const p0 = proj(sd * (R * 0.75 + Math.random() * 2 * k), R * 0.85, zb);
+      this.notes.push({ x: p0.x, y: p0.y, vx: sd * 15, t: 0, life: 2.2, ch: Math.random() < 0.5 ? '♪' : '♫', s: unit * (1.1 + Math.random() * 0.6) });
+    }
+    this.puffs = this.puffs.filter((p) => (p.t += dtb) < p.life);
+    this.puffs.forEach((p) => {
+      p.x += p.vx * dtb; p.y += p.vy * dtb;
+      ctx.globalAlpha = 1 - p.t / p.life;
+      ctx.fillStyle = '#f4f1e6'; ctx.strokeStyle = PAL.black; ctx.lineWidth = Math.max(2, unit * 0.1);
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r * (1 + p.t), 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.globalAlpha = 1;
+    });
+    this.notes = this.notes.filter((n) => (n.t += dtb) < n.life);
+    this.notes.forEach((n) => {
+      ctx.globalAlpha = Math.min(1, (n.life - n.t) / 0.5);
+      ctx.font = `${Math.round(n.s)}px serif`; ctx.textAlign = 'center';
+      ctx.fillStyle = PAL.black;
+      ctx.fillText(n.ch, n.x + n.vx * n.t + Math.sin(n.t * 4) * unit * 0.6, n.y - n.t * unit * 2.5);
+      ctx.globalAlpha = 1;
+    });
+
+    // ---- brazos de manguera con patas (bailan distinto según la emoción)
     [-1, 1].forEach((sd, i) => {
       const myBeat = (bi + i) % 2 === 0;
-      const up = myBeat ? pulse : pulse * 0.3;
+      let up = myBeat ? pulse : pulse * 0.3;
+      if (E === 'joy' || E === 'meow') up = pulse * 1.4;                       // aplaude/agita las dos
+      else if (E === 'vibe') up = 0.5 + Math.sin(this.time * 1.6 + i * Math.PI) * 0.6; // ondea lento
+      else if (E === 'irritated') up = i === 1 && bi % 2 === 0 ? pulse * 0.5 : 0;    // golpecito impaciente
+      else if (E === 'angry') up = 0.8 + (Math.random() - 0.5) * 0.5;              // puños temblando
       const toss = this.toss[i];
       const tossE = Math.sin(toss * Math.PI);
       const base = proj(sd * (R * 0.9), -R * 0.55, zb - 0.3);
@@ -319,7 +458,7 @@ export class CatWheel {
       path(); ctx.strokeStyle = PAL.yellow; ctx.lineWidth = thick; ctx.stroke();
       // pata
       const ang = Math.atan2(paw.y - c2.y, paw.x - c2.x) + Math.PI / 2;
-      this.drawPaw(ctx, paw.x, paw.y, unit * 1.05 * (1 + up * 0.12), ang, sd);
+      this.drawPaw(ctx, paw.x, paw.y, unit * 1.05 * (1 + up * 0.12), ang, sd, E === 'angry');
       // líneas de movimiento junto a la pata
       ctx.strokeStyle = PAL.black; ctx.lineWidth = Math.max(2, unit * 0.12);
       for (let k = 0; k < 3; k++) {
@@ -330,8 +469,15 @@ export class CatWheel {
     });
   }
 
-  drawPaw(ctx, x, y, s, ang, sd) {
+  drawPaw(ctx, x, y, s, ang, sd, fist) {
     ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
+    if (fist) { // puño cerrado: dedos recogidos
+      ctx.strokeStyle = PAL.black; ctx.lineWidth = Math.max(4, s * 0.2); ctx.fillStyle = PAL.yellow;
+      ctx.beginPath(); ctx.ellipse(0, -0.5 * s, 1.35 * s, 1.25 * s, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.lineWidth = Math.max(3, s * 0.15);
+      [-0.7, 0, 0.7].forEach((xx) => { ctx.beginPath(); ctx.moveTo(xx * s, -1.6 * s); ctx.lineTo(xx * s, -0.8 * s); ctx.stroke(); });
+      ctx.restore(); return;
+    }
     ctx.strokeStyle = PAL.black; ctx.lineWidth = Math.max(4, s * 0.2); ctx.lineJoin = 'round';
     ctx.fillStyle = PAL.yellow;
     // dedos + palma

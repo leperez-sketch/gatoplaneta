@@ -72,22 +72,27 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await host.waitForFunction(() => game.state === 'playing', null, { timeout: 40000 });
   const keyA2 = keyA;
   // jugador A: saltos guiados por el chart (simula a un humano perfecto con su latencia real)
-  // saltos (y dobles saltos) guiados por el plan de la partitura para el carril de A.
-  // Se recalcula cada vez con la posición ACTUAL de A (cambia tras cada cambio de sentido/velocidad).
-  const nextTouch = (k, after) => host.evaluate(([k, after]) => { const p = game.players.get(k); const out = [];
+  // toques guiados por el plan de la partitura para el carril de A: salto, doble salto y
+  // barandas (presionar y MANTENER hasta el final). Se recalcula con la posición ACTUAL de A.
+  const nextAction = (k, after) => host.evaluate(([k, after]) => { const p = game.players.get(k); const out = [];
     for (const c of game.chart.clusters) { const pl = c.plans[p.laneName]; if (!pl) continue; const a = c.anchor + c.dir * p.s / c.v;
-      out.push(a + pl.t0); if (pl.t1 !== null) out.push(a + pl.t1); } return out.find((x) => x > after); }, [k, after]);
+      out.push({ t: a + pl.t0, d: 1 });
+      if (c.rail) out.push({ t: a + pl.tEnd + 0.25, d: 0 }); else out.push({ t: a + pl.t0 + 0.08, d: 0 });
+      if (pl.t1 !== null) { out.push({ t: a + pl.t1, d: 1 }); out.push({ t: a + pl.t1 + 0.06, d: 0 }); } }
+    out.sort((x, y) => x.t - y.t); return out.find((x) => x.t > after) || null; }, [k, after]);
   let last = 0, touches = 0;
-  while (touches < 14) {
-    const tj = await nextTouch(keyA2, last + 0.05);
-    if (!tj) break;
-    while (true) { const t = await host.evaluate(() => game.audio.songTime()); if (t >= tj - 0.03) break; await sleep(8); }
-    await phones[0].p.evaluate(() => { const b = document.getElementById('btn-jump'); b.dispatchEvent(new Event('touchstart', { cancelable: true })); b.dispatchEvent(new Event('touchend', { cancelable: true })); });
-    last = tj; touches++;
+  const railsTotal = await host.evaluate(() => game.chart.clusters.filter((c) => c.rail && c.anchor < 75).length);
+  while (true) {
+    const ac = await nextAction(keyA2, last + 0.001);
+    if (!ac || ac.t > 75) break;
+    while (true) { const t = await host.evaluate(() => game.audio.songTime()); if (t >= ac.t - 0.03) break; await sleep(6); }
+    await phones[0].p.evaluate((d) => { const b = document.getElementById('btn-jump'); const ev = new Event(d ? 'touchstart' : 'touchend', { cancelable: true }); b.dispatchEvent(ev); }, ac.d);
+    last = ac.t; if (ac.d) touches++;
+    if (!(await host.evaluate((k) => game.players.get(k).alive, keyA2))) break;
   }
-  console.log('toques de A enviados:', touches, 'hasta t =', last.toFixed(1));
+  console.log('toques de A:', touches, 'hasta t =', last.toFixed(1), '· barandas en ese tramo:', railsTotal);
   await sleep(1500);
-  const res = await host.evaluate(() => [...game.players.values()].map((p) => ({ n: p.name, lane: p.laneName, alive: p.alive, score: p.score, perf: p.perfects, cleared: p.cleared })));
+  const res = await host.evaluate(() => [...game.players.values()].map((p) => ({ n: p.name, lane: p.laneName, alive: p.alive, score: p.score, perf: p.perfects, cleared: p.cleared, grinds: p.grindsDone || 0 })));
   console.log('resultado parcial', JSON.stringify(res));
   await host.screenshot({ path: OUT + 'e2e_game.png' });
   await phones[0].p.screenshot({ path: OUT + 'e2e_phone_game.png' });

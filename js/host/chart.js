@@ -11,7 +11,7 @@
 //  Todo grupo se valida con la física real (planCluster): siempre existe
 //  una ventana de despegue jugable; si no, se encoge o se simplifica.
 // =====================================================================
-import { PHYS, planCluster } from './physics.js';
+import { PHYS, planCluster, planRail, railPrims } from './physics.js';
 import { KIND_LIST, makeObstacleShape } from './catalog.js';
 
 export function mulberry32(a) {
@@ -24,9 +24,9 @@ export function mulberry32(a) {
 }
 
 export const DIFFICULTY = {
-  facil:   { label: 'Fácil',   minWindow: 0.16, thr: 0.1,   pat2: 0.6, pat3: 0.0, half: 0.6, travel0: 2.45, speedUp: [1.07, 1.11], minTravel: 1.55, revProb: 0.25, skip: 0.45, sizeMul: 0.8 },
-  normal:  { label: 'Normal',  minWindow: 0.12, thr: 0,     pat2: 1.0, pat3: 1.0, half: 1.0, travel0: 2.2,  speedUp: [1.09, 1.15], minTravel: 1.25, revProb: 0.35, skip: 0.28, sizeMul: 1.0 },
-  dificil: { label: 'Difícil', minWindow: 0.09, thr: -0.08, pat2: 1.3, pat3: 1.6, half: 1.3, travel0: 2.0,  speedUp: [1.12, 1.18], minTravel: 1.0,  revProb: 0.45, skip: 0.15, sizeMul: 1.0 },
+  facil:   { label: 'Fácil',   rail: 0.3,  minWindow: 0.16, thr: 0.1,   pat2: 0.6, pat3: 0.0, half: 0.6, travel0: 2.45, speedUp: [1.07, 1.11], minTravel: 1.55, revProb: 0.25, skip: 0.45, sizeMul: 0.8 },
+  normal:  { label: 'Normal',  rail: 0.45, minWindow: 0.12, thr: 0,     pat2: 1.0, pat3: 1.0, half: 1.0, travel0: 2.2,  speedUp: [1.09, 1.15], minTravel: 1.25, revProb: 0.35, skip: 0.28, sizeMul: 1.0 },
+  dificil: { label: 'Difícil', rail: 0.55, minWindow: 0.09, thr: -0.08, pat2: 1.3, pat3: 1.6, half: 1.3, travel0: 2.0,  speedUp: [1.12, 1.18], minTravel: 1.0,  revProb: 0.45, skip: 0.15, sizeMul: 1.0 },
 };
 
 export const LANES = ['front', 'back'];
@@ -75,6 +75,19 @@ export function generateChart(an, opts = {}) {
       notes.push({ t: beats[i] + (k * (nb - beats[i])) / 4, s, score: s + acc, i, k });
     }
   }
+
+  // ---- "notas largas": tramos de 3–6 beats con sonido sostenido y pocos ataques
+  //      nuevos (energía alta, onsets bajos) → candidatos a baranda para patinar.
+  const sustain = beats.map((_, i) => {
+    const K = 4;
+    if (i + K >= beats.length) return -9;
+    let e = 0, o = 0;
+    for (let j = i; j < i + K; j++) { e += energy[j]; if (j > i) o += (sub[j] ? (sub[j][0] * 0.5 + sub[j][1] + sub[j][2] + sub[j][3]) / 3.5 : 0); }
+    return e / K - 0.9 * o / (K - 1);
+  });
+  const sortedSus = sustain.filter((x) => x > -9).sort((a, b) => a - b);
+  const susHi = sortedSus[Math.floor(sortedSus.length * 0.7)] || 0, susMid = sortedSus[Math.floor(sortedSus.length * 0.5)] || 0;
+  let phrasesSinceRail = 0;
 
   const events = [], clusters = [], sections = [];
   let dir = rng() < 0.5 ? 1 : -1;
@@ -132,6 +145,18 @@ export function generateChart(an, opts = {}) {
     }
 
     const v = (PHYS.SPAWN_ARC * PHYS.R) / travel;
+    // ¿baranda en esta frase? (en un tiempo fuerte con nota sostenida)
+    let railBeat = -1;
+    phrasesSinceRail++;
+    if (level >= 1 && tp > 15) {
+      let bestI = -1, bestS = -9;
+      for (let i = pi; i < Math.min(beats.length - 6, pi + PHRASE - 2); i += 2) {
+        if (beats[i] < Math.max(firstT, blockUntil) || beats[i] > lastT - 3) continue;
+        if (sustain[i] > bestS) { bestS = sustain[i]; bestI = i; }
+      }
+      const okScore = bestS >= susHi || (phrasesSinceRail >= 3 && bestS >= susMid);
+      if (bestI >= 0 && okScore && rng() < D.rail + (phrasesSinceRail >= 3 ? 0.3 : 0)) railBeat = bestI;
+    }
     const halfMode = tp > 20 && rng() < D.half * (0.14 + 0.1 * level);
     const thr = [0.62, 0.5, 0.41, 0.33][level] + D.thr;
     const pN = notes.filter((x) => x.t >= Math.max(firstT, blockUntil, tp) && x.t < tEnd && x.t <= lastT);
@@ -147,6 +172,30 @@ export function generateChart(an, opts = {}) {
 
     for (let ni = 0; ni < pN.length; ni++) {
       const note = pN[ni];
+      // ---- baranda: ocupa la nota larga completa
+      if (railBeat >= 0 && note.i === railBeat && note.k === 0) {
+        let K = 6;
+        const subOff = (j) => (sub[j] ? (sub[j][1] + sub[j][2] + sub[j][3]) / 3 : 0);
+        while (K > 3 && subOff(railBeat + K - 1) > 0.5) K--;
+        let dur = Math.min(K * bd, 2.4, 9 / v);
+        if (dur >= 1.25 && note.t + dur < lastT) {
+          const L = v * dur;
+          const pl = planRail(L, v);
+          if (pl.ok && pl.window >= D.minWindow && note.t + pl.from >= Math.max(prevLand.front, prevLand.back) + 0.05 && note.t >= lastArr + 0.3) {
+            const cid = clusters.length;
+            const prims = railPrims(L, dir);
+            const ev = { id: 0, tArr: note.t, tSpawn: note.t - travel, dir, v, travel, kind: 'rail', w: L, h: PHYS.RAIL_H, prims, lane: 'all',
+              railL: L, tEnd: note.t + dur, cluster: cid, ci: 0, accent: note.s, seed: Math.floor(rng() * 1e9) };
+            const cl = { id: cid, anchor: note.t, dir, v, travel, plans: { front: pl, back: pl }, members: [ev], lastArr: note.t + dur, accent: note.s, rail: true };
+            events.push(ev); clusters.push(cl);
+            prevLand = { front: note.t + pl.land, back: note.t + pl.land };
+            lastArr = note.t + dur;
+            phrasesSinceRail = 0;
+            while (ni + 1 < pN.length && pN[ni + 1].t <= lastArr + 0.3) ni++;
+            continue;
+          }
+        }
+      }
       if (note.score < thr) continue;
       if (note.t < lastArr + 0.22) continue;
       if (rng() < D.skip * (1 - Math.min(1, note.s))) continue;

@@ -13,11 +13,14 @@ Juego de ritmo multijugador estilo **caricatura de los años 20** (rubber hose).
 5. Saltar justo en el ritmo da **¡PERFECTO!** (x3) y combo.
 6. **¡AL REVÉS!**: la rueda cambia de sentido. **¡MÁS RÁPIDO!**: cada ~25–38 s (al azar) la rueda acelera.
 7. La rueda tiene dos carriles (adelante y atrás, separados por una línea punteada). En algunas secciones hay obstáculos de **medio carril**: solo saltan los del carril afectado.
-8. El fondo cambia de color según la energía de la canción (azul/verde tranquilo, morado con ritmo, rojo/magenta intenso, naranja a tope).
+8. **Barandas para patinar 🛹**: en las notas largas aparece una baranda sobre una fila de pinchos. Salta encima y **mantén presionado** para patinar con chispas hasta el final (salto automático con voltereta y bonus por tiempo). Si sueltas, te resbalas.
+9. **El gato tiene emociones** según cómo juegan todos: alegría (perfectos), **disfrutando** con los ojos cerrados y notas musicales (racha del grupo), sorpresa (alguien cae, cambios), irritación (timing descuidado) y enojo (varios K.O. seguidos: cara roja, dientes, puños y vapor por las orejas).
+10. Los personajes sueltan **globos de slang de b-boy** cuando van en racha o patinan: ¡COOL!, ¡SUPERFLY!, ¡FRESH!, ¡WINDMILL!, ¡HEADSPIN!…
+11. El fondo cambia de color según la energía de la canción (azul/verde tranquilo, morado con ritmo, rojo/magenta intenso, naranja a tope).
 
 | Acción | Celular | Teclado 1 | Teclado 2 |
 |---|---|---|---|
-| Saltar (2 veces = doble salto) | botón gigante | Espacio / W | ↑ |
+| Saltar (2 veces = doble salto; mantener = patinar) | botón gigante | Espacio / W | ↑ |
 | Maullar | 🐾 ¡MIAU! | M | N |
 
 En la pantalla: **H** muestra los hitboxes, **Esc/P** pausa (intermedio).
@@ -65,6 +68,7 @@ El TURN público incluido (`openrelay.metered.ca`) es "de mejor esfuerzo": puede
 - Al cargar una canción se analiza en un *Web Worker*: flujo espectral → tempo por autocorrelación → seguimiento de beats por programación dinámica → fuerza/energía por beat y tiempo 1 del compás.
 - La partitura lee las **notas** de la canción (onsets en semicorcheas), no solo el pulso, como un Guitar Hero: acentos fuertes → obstáculo suelto y grande; ráfagas de notas → grupos de 2–3 obstáculos seguidos, cada uno en su nota, que se pasan con un salto largo o doble salto. Por eso el intervalo entre obstáculos varía con la música (no es predecible).
 - La densidad y los patrones suben con la energía de cada frase; hay secciones de medio carril, cambios de sentido en inicios de frase y aceleraciones cada ~25–38 s.
+- Las **notas largas** (tramos con sonido sostenido y pocos ataques nuevos) se convierten en barandas; el generador verifica que siempre se pueda subir a la baranda y que la caída sea a tiempo para lo siguiente.
 - La partitura se genera en un *Web Worker* durante la transición, sin congelar la pantalla.
 - Los jugadores se ubican sobre la cabeza separados por **una fracción musical** (1, ½ o ¼ de beat) de recorrido del obstáculo: a cada uno le llega su obstáculo justo en un tiempo o subdivisión.
 - Puedes cargar **cualquier MP3** desde el lobby; el botón ↺ vuelve a la canción original.
@@ -82,7 +86,7 @@ npm test -- /tmp/ww.f32
 
 Hay también un test de red de punta a punta (`tests/red.e2e.cjs`: dos celulares, reconexión, recarga del host y saltos con lag real).
 
-El test de partitura (3 dificultades × 3 semillas) verifica que todo grupo tenga ventana de despegue, que un jugador que sigue el plan (con doble salto cuando hace falta) sobreviva **toda la canción en cualquier posición y carril**, que sin saltar se muera y que cada llegada caiga en el ritmo. También reporta la variedad: grupos de 1/2/3, medio carril, aceleraciones y cuánto varía el intervalo entre obstáculos.
+El test de partitura (3 dificultades × 3 semillas) verifica que todo grupo tenga ventana de despegue, que un jugador que sigue el plan (con doble salto cuando hace falta y patinando cada baranda) sobreviva **toda la canción en cualquier posición y carril**, que sin saltar se muera y que cada llegada caiga en el ritmo. También reporta la variedad: grupos de 1/2/3, medio carril, aceleraciones y cuánto varía el intervalo entre obstáculos.
 
 ## Personajes
 

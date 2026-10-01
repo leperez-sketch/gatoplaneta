@@ -2,11 +2,11 @@
 //  GATO SWING · Lógica del juego en el host
 // =====================================================================
 import * as THREE from 'three';
-import { PHYS, hitTest, heightAt, landTime, makeTraj, reachOf } from './physics.js';
+import { PHYS, hitTest, heightAt, landTime, makeTraj, reachOf, overRail } from './physics.js';
 import { generateChart, dirAt, changeAt, playerSpacing, laneHits } from './chart.js';
 import { CatWheel, PAL } from './cat.js';
 import { CharacterActor, CHARACTERS, CHAR_HEIGHT } from './characters.js';
-import { buildObstacleMesh, buildHitboxMesh } from './obstacles3d.js';
+import { buildObstacleMesh, buildHitboxMesh, buildRailParts } from './obstacles3d.js';
 import { FX } from './fx.js';
 
 export const PLAYER_COLORS = ['#ff3b4e', '#22d3ee', '#a3e635', '#ff9f1c', '#e879f9', '#ffffff', '#fb7185', '#2dd4bf', '#facc15', '#a78bfa', '#4ade80', '#f97316'];
@@ -20,6 +20,11 @@ export const BG_PALETTES = [
   ['#b8262f', '#8a1f9e'],   // intenso: rojo / magenta
   ['#d4541c', '#b8262f'],   // a tope: naranja / rojo
 ];
+
+// Slang de breakdance / b-boys para los globos de los personajes
+export const SLANG = ['¡COOL!', '¡SUPERFLY!', '¡FRESH!', '¡FUNKY!', '¡DOPE!', '¡SMOOTH!', '¡FLY!', '¡GROOVY!',
+  '¡B-BOY!', '¡FREEZE!', '¡WINDMILL!', '¡HEADSPIN!', '¡BOOGIE!', '¡OLD SCHOOL!', '¡TOPROCK!', '¡POWER MOVE!', '¡ON BEAT!', '¡FLARE!'];
+export const GRIND_SLANG = ['¡GRIND!', '¡SUPERFLY!', '¡SMOOTH!', '¡RADICAL!', '¡FLY!', '¡SICK!'];
 
 /** Genera la partitura en un Worker (no congela la pantalla). */
 function makeChartAsync(analysis, opts) {
@@ -155,7 +160,7 @@ export class Game {
       connected: true, alive: true, waiting: this.state !== 'lobby',
       score: 0, combo: 0, maxCombo: 0, cleared: 0, perfects: 0, place: 0,
       jump: null, landT: -99, buffered: false, pending: null, lastMeow: 0, lastT0: -99,
-      laneName: 'front',
+      laneName: 'front', holding: false, releaseT: -99, grind: null, prevFeet: 0, grindTime: 0, lastSlang: 0,
       lane: 0, s: (Math.random() - 0.5) * 6, walkTarget: 0, walkPause: Math.random() * 2,
       facingDir: Math.random() < 0.5 ? -1 : 1, ko: null, skill: 0.55 + Math.random() * 0.4,
       lastJumpReq: 0,
@@ -233,6 +238,11 @@ export class Game {
   }
 
   setupKeyboard() {
+    window.addEventListener('keyup', (e) => {
+      const k1 = this.players.get('kb-1'), k2 = this.players.get('kb-2');
+      if ((e.code === 'Space' || e.code === 'KeyW') && k1) this.release(k1);
+      if ((e.code === 'ArrowUp' || e.code === 'Enter') && k2) this.release(k2);
+    });
     window.addEventListener('keydown', (e) => {
       if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
       if (e.repeat) return;
@@ -279,6 +289,8 @@ export class Game {
     p.lastJumpReq = real;
     if (this.state === 'playing') { if (!p.alive) return; tPress = Math.min(now, tPress); }
     else tPress = now; // lobby: salto de prueba (también con doble salto)
+    p.holding = true;
+    if (p.grind) return; // patinando: presionar = seguir agarrado a la baranda
     const J = p.jump;
     if (!J) {
       const t0 = Math.max(tPress, p.landT);
@@ -302,6 +314,13 @@ export class Game {
     }
   }
 
+  /** Soltó el botón (para las barandas hay que mantener presionado). */
+  release(p) {
+    if (!p) return;
+    p.holding = false;
+    p.releaseT = this.nowSong();
+  }
+
   meow(p) {
     const now = performance.now();
     if (!p || now - p.lastMeow < 1000) return;
@@ -322,7 +341,8 @@ export class Game {
       }
       p.lagGrace = Math.max(0.05, Math.min(0.2, ((client && (client.minRtt || client.rtt)) || 60) / 2000 + 0.06));
       this.jump(p, this.nowSong() - delay);
-    } else if (msg.t === 'meow') this.meow(p);
+    } else if (msg.t === 'up') this.release(p);
+    else if (msg.t === 'meow') this.meow(p);
     else if (msg.t === 'name' && this.state === 'lobby') { p.name = cleanName(msg.name); this.saveRoster(); this.ui.refreshLobby(); }
   }
 
@@ -343,6 +363,7 @@ export class Game {
       p.waiting = false; p.alive = true; p.score = 0; p.combo = 0; p.maxCombo = 0; p.cleared = 0; p.perfects = 0; p.place = 0;
       p.jump = null; p.landT = -99; p.buffered = false; p.pending = null; p.ko = null; p.elimT = null; p.lastJumpReq = 0;
       p.lastT0 = -99; p.handled = null; p.botPlan = null; p.judged = new Map();
+      p.grind = null; p.holding = !!p.isBot; p.releaseT = -99; p.prevFeet = 0; p.grindTime = 0; p.lastSlang = 0;
       p.actor.group.visible = true; p.actor.bodyPivot.rotation.set(0, 0, 0); p.actor.facing.rotation.x = 0; p.actor.group.scale.setScalar(1);
     });
     this.layoutLanes();
@@ -350,6 +371,7 @@ export class Game {
     const chartReady = makeChartAsync(this.analysis, { difficulty: this.difficulty, seed: (Math.random() * 1e9) | 0 });
     this.clearObstacles();
     this.nextEv = 0; this.simT = -0.5; this.warned = new Set();
+    this.emo = { recent: [], kos: [], joyUntil: 0, surpriseUntil: 0, angryUntil: 0, current: 'idle' };
     this.startCount = this.players.size;
     this.state = 'countdown';
     this.ui.onState('preparing');
@@ -360,6 +382,7 @@ export class Game {
       this.ui.preparing(false);
       if (this.state !== 'countdown') return; // canceló mientras tanto
       this.layoutPlay(0, true);
+      this.prewarm();
       this.updateCamTargets();
       this.camPos.copy(this.camTarget.pos); this.camLook.copy(this.camTarget.look);
       const d0 = dirAt(this.chart, 0);
@@ -377,6 +400,31 @@ export class Game {
     });
     this.updateCamTargets();
     return true;
+  }
+
+  /**
+   * Pre-compila los shaders de todos los tipos de obstáculo (y la baranda)
+   * durante la cuenta regresiva, para que el primero de cada tipo no dé un
+   * "tirón" en PCs modestos.
+   */
+  prewarm() {
+    if (this.warmed) return;
+    try {
+      const g = new THREE.Group();
+      const seen = new Set();
+      for (const ev of this.chart.events) {
+        if (seen.has(ev.kind)) continue;
+        seen.add(ev.kind);
+        if (ev.kind === 'rail') buildRailParts(ev, DEPTH - 0.15, PHYS).forEach((pt) => g.add(pt.mesh));
+        else g.add(buildObstacleMesh(ev, DEPTH - 0.15));
+      }
+      g.position.set(0, R + 1, 0);
+      this.scene.add(g);
+      this.renderer.compile(this.scene, this.camera);
+      this.renderer.render(this.scene, this.camera);
+      this.scene.remove(g);
+      this.warmed = seen.size >= 9;
+    } catch (e) { console.warn('prewarm', e); }
   }
 
   clearObstacles() {
@@ -415,6 +463,17 @@ export class Game {
     const ch = this.chart;
     while (this.nextEv < ch.events.length && ch.events[this.nextEv].tSpawn - 0.2 <= t) {
       const ev = ch.events[this.nextEv++];
+      if (ev.kind === 'rail') {
+        const holder = new THREE.Group();
+        const parts = buildRailParts(ev, DEPTH - 0.15, PHYS);
+        parts.forEach((pt) => { holder.add(pt.mesh); pt.mesh.visible = false; pt.born = null; });
+        this.obsLayer.add(holder);
+        this.active.push({ ev, mesh: holder, parts, passed: false, passedBy: new Set(), reach: reachOf(ev.prims), born: t, hb: this.showHitboxes, rail: true });
+        this.cat.tossPaw(-ev.dir);
+        this.audio.spring();
+        this.ui.railHint();
+        continue;
+      }
       // medio carril: la mitad de la profundidad, adelante (+z) o atrás (-z)
       const half = ev.lane !== 'all';
       const depthUse = half ? DEPTH / 2 - 0.12 : DEPTH - 0.15;
@@ -447,21 +506,52 @@ export class Game {
     if (steps >= 400) this.simT = t;
   }
 
-  feetAt(p, t) { return p.jump ? heightAt(p.jump.segs, t) : 0; }
+  feetAt(p, t) { return p.grind ? PHYS.RAIL_H : (p.jump ? heightAt(p.jump.segs, t) : 0); }
 
   physicsAt(t) {
     this.players.forEach((p) => {
       if (!p.alive || p.waiting) return;
       // aterrizaje
-      if (p.jump && t >= landTime(p.jump.segs)) {
+      if (p.jump && !p.grind && t >= landTime(p.jump.segs)) {
         p.landT = landTime(p.jump.segs);
         p.jump = null;
         p.actor.kick(-2.2);
         if (p.buffered) { p.buffered = false; p.jump = { segs: makeTraj(p.landT, null), dj: false }; p.lastT0 = p.landT; p.actor.kick(-3); this.audio.jump(); }
       }
       if (p.isBot) this.botThink(p, t);
+      // ---- patinando sobre una baranda
+      if (p.grind) {
+        const g = p.grind;
+        const rel = this.obstacleS(g.ev, t) - p.s;
+        p.grindTime += PHYS.STEP;
+        if (!overRail(rel, g.ev.railL, g.ev.dir)) {
+          // fin de la baranda: saltito automático con voltereta
+          p.grind = null;
+          p.jump = { segs: [{ t, h: PHYS.RAIL_H, v: PHYS.POP_V }], dj: false, pop: true };
+          this.onGrindEnd(p, g, t);
+        } else if (!p.holding && t - Math.max(p.releaseT, g.t) > PHYS.SLIP_GRACE) {
+          // soltó el botón: se resbala y cae
+          p.grind = null;
+          p.jump = { segs: [{ t, h: PHYS.RAIL_H, v: 0.5 }], dj: false, slip: true };
+          this.fx.popup('¡RESBALÓN!', p.actor.group.position.clone().setY(p.actor.group.position.y + CHAR_HEIGHT), '#ff8fa0', 0.8);
+          this.ui.sendTo(p, { t: 'hint', text: '¡Mantén presionado para patinar!' });
+        }
+      }
       // colisiones (posición relativa al jugador)
-      const feet = this.feetAt(p, t);
+      let feet = this.feetAt(p, t);
+      // ---- aterrizar sobre una baranda (bajando, cruzando su altura, encima de ella)
+      if (!p.grind && p.jump && feet < PHYS.RAIL_H && p.prevFeet >= PHYS.RAIL_H) {
+        for (const o of this.active) {
+          if (o.ev.kind !== 'rail') continue;
+          if (overRail(this.obstacleS(o.ev, t) - p.s, o.ev.railL, o.ev.dir)) {
+            p.grind = { ev: o.ev, o, t }; p.jump = null; p.grindTime = 0; feet = PHYS.RAIL_H;
+            p.actor.kick(-2.5);
+            this.audio.grindStart();
+            break;
+          }
+        }
+      }
+      p.prevFeet = feet;
       let hitObs = null;
       for (const o of this.active) {
         if (!laneHits(o.ev.lane, p.laneName)) continue;
@@ -517,6 +607,7 @@ export class Game {
         break;
       }
     }
+    if (p.grind) return;
     if (p.botPlan && t >= p.botPlan.t0) {
       p.handled.add(p.botPlan.id);
       const t1 = p.botPlan.t1;
@@ -548,13 +639,88 @@ export class Game {
       j = mult === 3 ? 'perfect' : mult === 2 ? 'great' : 'ok';
       text = '+' + (c ? c.members.indexOf(ev) + 1 : ''); color = '#ffd36b';
     }
+    if (ev.kind === 'rail') return; // el puntaje de la baranda se da al terminar de patinar (onGrindEnd)
     p.combo++; p.maxCombo = Math.max(p.maxCombo, p.combo); p.cleared++;
     const gain = Math.round(100 * mult * (1 + Math.min(p.combo, 30) * 0.1));
     p.score += gain;
     const head = p.actor.group.position.clone(); head.y += CHAR_HEIGHT + 0.5;
     if (!p.isBot || this.players.size <= 2) this.fx.popup(text, head, color, j === 'perfect' ? 0.95 : 0.75);
     if (j === 'perfect' && !p.isBot && firstMine === ev) this.audio.perfect();
-    this.ui.sendTo(p, { t: 'judge', j, combo: p.combo, score: p.score });
+    if (firstMine === ev) this.emoJudge(j);
+    // globo de slang: rachas y grupos con doble salto perfectos
+    let sl = null;
+    const djPerfect = j === 'perfect' && c && c.members.length > 1 && ev === c.members[c.members.length - 1];
+    if ((p.combo >= 5 && p.combo % 5 === 0) || djPerfect) sl = this.slang(p, SLANG);
+    this.ui.sendTo(p, { t: 'judge', j, combo: p.combo, score: p.score, sl });
+  }
+
+  /** Terminó de patinar una baranda: bonus por tiempo patinado. */
+  onGrindEnd(p, g, t) {
+    const c = this.chart.clusters[g.ev.cluster];
+    const pl = c && c.plans[p.laneName];
+    let mult = 1, j = 'ok';
+    if (pl) {
+      const ideal = c.anchor + c.dir * p.s / c.v + pl.t0;
+      const diff = Math.abs(p.lastT0 - ideal);
+      if (diff <= Math.max(0.06, pl.window * 0.2)) { mult = 3; j = 'perfect'; p.perfects++; }
+      else if (diff <= Math.max(0.12, pl.window * 0.4)) { mult = 2; j = 'great'; }
+    }
+    p.combo += 2; p.maxCombo = Math.max(p.maxCombo, p.combo); p.cleared++;
+    p.grindsDone = (p.grindsDone || 0) + 1;
+    const gain = Math.round((150 + p.grindTime * 500) * mult * (1 + Math.min(p.combo, 30) * 0.1));
+    p.score += gain;
+    const head = p.actor.group.position.clone(); head.y += CHAR_HEIGHT + 0.6;
+    this.fx.popup('GRIND +' + gain, head, PAL.yellow, 0.9);
+    this.audio.grindEnd();
+    this.emoJudge(j); this.emoJudge('grind');
+    const sl = this.slang(p, GRIND_SLANG, true);
+    this.ui.sendTo(p, { t: 'judge', j, combo: p.combo, score: p.score, sl });
+  }
+
+  /** Globo de slang sobre el personaje (con límite para no saturar). */
+  slang(p, list, force) {
+    const now = performance.now();
+    if (!force && now - p.lastSlang < 2200) return null;
+    p.lastSlang = now;
+    const text = list[Math.floor(Math.random() * list.length)];
+    if (!p.isBot || this.players.size <= 3 || Math.random() < 0.35) this.fx.slang(p.key, text);
+    return text;
+  }
+
+  // ------------------------------------------------- emociones del gato
+  emoJudge(j) {
+    if (!this.emo) return;
+    if (j === 'grind') { this.emo.joyUntil = this.nowSong() + 1.6; return; }
+    this.emo.recent.push(j);
+    if (this.emo.recent.length > 10) this.emo.recent.shift();
+    if (j === 'perfect') {
+      const last = this.emo.recent.slice(-5);
+      if (last.filter((x) => x === 'perfect').length >= 3) this.emo.joyUntil = this.nowSong() + 1.4;
+    }
+  }
+  /**
+   * Elige la emoción del gato según cómo juegan todos:
+   *  enojo (varios K.O. seguidos) > sorpresa (alguien cae / cambio) > alegría
+   *  (perfectos) > disfrutando (racha: cierra los ojos) > irritación (timing
+   *  descuidado) > normal.
+   */
+  updateEmotion(t) {
+    const E = this.emo;
+    if (!E || this.state !== 'playing') return this.state === 'results' ? 'joy' : 'idle';
+    E.kos = E.kos.filter((k) => t - k < 6);
+    const alive = [...this.players.values()].filter((p) => p.alive && !p.waiting);
+    const bestCombo = alive.reduce((m, p) => Math.max(m, p.combo), 0);
+    const r = E.recent.slice(-8);
+    const good = r.filter((x) => x === 'perfect' || x === 'great').length;
+    const sloppy = r.slice(-6).filter((x) => x === 'ok').length;
+    let e = 'idle';
+    if (t < E.angryUntil) e = 'angry';
+    else if (t < E.surpriseUntil) e = 'surprised';
+    else if (t < E.joyUntil) e = 'joy';
+    else if (bestCombo >= 8 && r.length >= 6 && good / r.length >= 0.75) e = 'vibe';
+    else if (sloppy >= 4) e = 'irritated';
+    E.current = e;
+    return e;
   }
 
   eliminate(p, o, t) {
@@ -570,7 +736,14 @@ export class Game {
     const pos = p.actor.group.position.clone(); pos.y += 1.2;
     this.fx.poof(pos, 1.2); this.fx.koStars(pos);
     this.fx.popup('¡K.O.!', pos, PAL.red, 1.3);
-    this.cat.setMood('surprised', 0.5); this.cat.meow(0.4);
+    if (this.emo) {
+      this.emo.kos.push(t);
+      if (this.emo.kos.filter((k) => t - k < 5).length >= 2) this.emo.angryUntil = t + 3;
+      else this.emo.surpriseUntil = t + 1.3;
+      this.emo.recent.push('ko');
+    }
+    p.grind = null;
+    this.cat.meow(0.4);
     this.ui.toast(`💥 ¡${p.name} quedó fuera!`);
     this.ui.sendTo(p, { t: 'ko', place: p.place, score: p.score });
     this.checkEnd(t);
@@ -649,7 +822,8 @@ export class Game {
     } else { look = undefined; spin = 0.12; }
     this.spinSpeed += (spin - this.spinSpeed) * Math.min(1, dt * 4);
     this.dir = dir;
-    this.cat.update(dt, { beat: beat.phase, beatIndex: beat.index, look, spinSpeed: this.spinSpeed, lookY: 0 });
+    const emotion = this.updateEmotion(t);
+    this.cat.update(dt, { beat: beat.phase, beatIndex: beat.index, look, spinSpeed: this.spinSpeed, lookY: 0, emotion });
     // color de fondo según la sección de la canción
     this.bgTarget = BG_PALETTES[0][0];
     if (this.chart && (this.state === 'playing' || this.state === 'results')) {
@@ -674,7 +848,7 @@ export class Game {
         this.warned.add(i);
         this.ui.change(r);
         this.cat.meow(1); this.audio.meow(r.speed ? 1.25 : 0.8);
-        this.cat.setMood('surprised', 1.0);
+        if (this.emo) this.emo.surpriseUntil = t + 1.2;
       }
       if (t >= r.t && !this.warned.has('done' + i)) {
         this.warned.add('done' + i);
@@ -695,6 +869,26 @@ export class Game {
       const s = this.state === 'playing' ? this.obstacleS(ev, t) : this.obstacleS(ev, o.lastT || t);
       if (this.state === 'playing') o.lastT = t;
       o.passed = s * ev.dir > 0;
+      if (o.rail) {
+        // cada tramo sigue la curva; aparece al entrar al arco visible
+        for (const pt of o.parts) {
+          const sp = s + pt.dx;
+          const ph = sp / R;
+          pt.mesh.position.set(R * Math.sin(ph), R * Math.cos(ph), 0);
+          pt.mesh.rotation.z = -ph;
+          const inside = Math.abs(sp) <= PHYS.SPAWN_ARC * R + 0.2 && sp * ev.dir <= PHYS.EXIT_ARC * R;
+          if (inside && pt.born === null) pt.born = t;
+          pt.mesh.visible = inside;
+          if (inside) {
+            const k = Math.min(1, Math.max(0, (t - pt.born) / 0.25));
+            pt.mesh.scale.set(1, k < 1 ? Math.max(0.01, (1 - Math.pow(1 - k, 3)) * (1 + Math.sin(k * Math.PI) * 0.3)) : 1, 1);
+          }
+        }
+        const tail = (s - ev.dir * ev.railL) * ev.dir;
+        if ((tail > PHYS.EXIT_ARC * R || o.kill) && this.state === 'playing') { this.obsLayer.remove(o.mesh); continue; }
+        keep.push(o);
+        continue;
+      }
       const phi = s / R;
       o.mesh.position.set(R * Math.sin(phi), R * Math.cos(phi), 0);
       o.mesh.rotation.z = -phi;
@@ -748,6 +942,7 @@ export class Game {
         air = this.state === 'playing' ? this.feetAt(p, t) : 0;
         if (this.state === 'results') mode = p.alive ? 'idle' : 'ko';
         else if (this.state === 'countdown') mode = 'idle';
+        else if (p.grind) mode = 'grind';
         else mode = air > 0 ? 'jump' : 'run';
         a.faceTowards(-dir, dt);
       } else {
@@ -770,8 +965,8 @@ export class Game {
       a.group.position.set(Math.sin(phi) * rr, Math.cos(phi) * rr, z);
       // voltereta en el doble salto (hacia donde corre)
       let flip = 0;
-      if (p.jump && p.jump.dj) {
-        const k = Math.min(1, Math.max(0, (t - p.jump.segs[1].t) / 0.55));
+      if (p.jump && (p.jump.dj || p.jump.pop)) {
+        const k = Math.min(1, Math.max(0, (t - p.jump.segs[p.jump.pop ? 0 : 1].t) / 0.55));
         flip = (1 - Math.pow(1 - k, 2)) * Math.PI * 2 * (playing ? dir : (a.heading > 1.5 ? 1 : -1));
       }
       a.group.rotation.z = -phi + flip;
@@ -781,6 +976,11 @@ export class Game {
       const ls = p.jump ? p.jump.segs[p.jump.segs.length - 1] : null;
       const vyUp = ls ? (ls.v - PHYS.G * (t - ls.t)) > 0 : false;
       a.update(dt, { mode, speed: Math.abs(v), vyUp, beat: beat.phase, beatIndex: beat.index + (p.key.length % 2) });
+      if (p.grind && Math.random() < 0.7) {
+        const fp = a.group.position.clone();
+        fp.y -= 0.02;
+        this.fx.spark(fp, dir);
+      }
       if (p.pending) a.group.position.x += (Math.random() - 0.5) * 0.02;
     });
   }

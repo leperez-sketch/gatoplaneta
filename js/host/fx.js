@@ -56,6 +56,10 @@ export class FX {
   poof(wpos, scale = 1) { this.poofs.push({ w: wpos.clone(), t: 0, life: 0.45, scale, seed: Math.random() * 10 }); }
   bubble(id, text) { this.bubbles = this.bubbles.filter((b) => b.id !== id); this.bubbles.push({ id, text, t: 0, life: 1.3 }); }
   flash() { this.flashT = 0.35; }
+  /** Globo de slang tipo explosión de cómic ("¡SUPERFLY!") sobre un personaje. */
+  slang(id, text) { this.slangs = (this.slangs || []).filter((b) => b.id !== id); this.slangs.push({ id, text, t: 0, life: 1.5, rot: (Math.random() - 0.5) * 0.3, side: Math.random() < 0.5 ? -1 : 1 }); }
+  /** Chispa de patinaje en una posición del mundo. */
+  spark(wpos, dir) { (this.sparks = this.sparks || []).push({ w: wpos.clone(), t: 0, life: 0.3, vx: -dir * (60 + Math.random() * 120), vy: -(40 + Math.random() * 120), dx: 0, dy: 0 }); }
   koStars(wpos) { for (let i = 0; i < 5; i++) this.stars.push({ w: wpos.clone(), t: 0, life: 1.2, a: (i / 5) * Math.PI * 2 }); }
 
   /** Transición de iris: dir 'close' (se cierra a negro) o 'open'. */
@@ -90,6 +94,48 @@ export class FX {
       ctx.restore();
     });
     this.bubbles = this.bubbles.filter((b) => b.t < b.life);
+
+    // ---- chispas de patinaje
+    (this.sparks || []).forEach((sp) => {
+      sp.t += dt; sp.dx += sp.vx * dt; sp.dy += sp.vy * dt; sp.vy += 500 * dt;
+      const p = project(sp.w.x, sp.w.y, sp.w.z);
+      ctx.strokeStyle = Math.random() < 0.5 ? '#ffe600' : '#ff9f1c'; ctx.lineWidth = 3;
+      ctx.globalAlpha = 1 - sp.t / sp.life;
+      ctx.beginPath(); ctx.moveTo(p.x + sp.dx, p.y + sp.dy); ctx.lineTo(p.x + sp.dx - sp.vx * 0.04, p.y + sp.dy - sp.vy * 0.04); ctx.stroke();
+      ctx.globalAlpha = 1;
+    });
+    this.sparks = (this.sparks || []).filter((sp) => sp.t < sp.life);
+
+    // ---- globos de slang (explosión de cómic)
+    (this.slangs || []).forEach((b) => {
+      b.t += dt;
+      const pl = plates && plates.find((p) => p.id === b.id);
+      if (!pl) return;
+      const k = b.t < 0.14 ? (b.t / 0.14) * 1.2 : b.t < 0.24 ? 1.2 - (b.t - 0.14) * 2 : 1;
+      const fade = b.t > b.life - 0.25 ? (b.life - b.t) / 0.25 : 1;
+      const x = pl.head.x + b.side * base * 3.4, y = pl.head.y - base * 2.2 - b.t * base * 0.6;
+      ctx.save(); ctx.globalAlpha = Math.max(0, fade); ctx.translate(x, y); ctx.scale(k, k); ctx.rotate(b.rot);
+      ctx.font = `${base * 1.2}px ${FONT_DECO}`;
+      const tw = ctx.measureText(b.text).width;
+      const rx = tw / 2 + base * 1.1, ry = base * 1.45;
+      // explosión con picos
+      ctx.beginPath();
+      const n = 16;
+      for (let i = 0; i <= n * 2; i++) {
+        const a = (i / (n * 2)) * Math.PI * 2;
+        const rr = i % 2 ? 0.78 : 1.0;
+        const px = Math.cos(a) * rx * rr, py = Math.sin(a) * ry * rr;
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fillStyle = PAL.black; ctx.save(); ctx.translate(4, 4); ctx.fill(); ctx.restore();
+      ctx.fillStyle = PAL.yellow; ctx.strokeStyle = PAL.black; ctx.lineWidth = 3; ctx.fill(); ctx.stroke();
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.lineWidth = 5; ctx.strokeStyle = PAL.white; ctx.strokeText(b.text, 0, 1);
+      ctx.fillStyle = PAL.maroon; ctx.fillText(b.text, 0, 1);
+      ctx.restore();
+    });
+    this.slangs = (this.slangs || []).filter((b) => b.t < b.life);
 
     // ---- popups de juicio
     this.popups.forEach((p) => {

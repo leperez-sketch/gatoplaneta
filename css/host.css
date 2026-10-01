@@ -122,6 +122,7 @@ details.adv input[type=range] { width: 55%; accent-color: var(--maroon); }
   background-image: repeating-linear-gradient(0deg, transparent 0 18px, rgba(0,0,0,.12) 18px 21px);
 }
 .sign .arrow { font-family: var(--ui); font-size: 1.3em; color: var(--yellow); }
+.sign.rail { background-color: #2b33a8; font-size: clamp(20px, 2.8vw, 40px); }
 .sign.speed { background-color: var(--red); top: 15vh; }
 .sign.second { top: calc(15vh + clamp(60px, 9vw, 110px)); }
 @keyframes signIn { from { transform: translate(-50%, -60px) rotate(-8deg); opacity: 0; } to { transform: translate(-50%, 0) rotate(-2deg); opacity: 1; } }

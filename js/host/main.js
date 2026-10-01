@@ -94,6 +94,16 @@ const ui = {
     clearTimeout(this.signTimer);
     this.signTimer = setTimeout(() => { if (card.querySelector('.sign')) card.innerHTML = ''; }, 1900);
   },
+  railHint() {
+    const now = performance.now();
+    if (now - (this.railHintT || 0) < 4000) return;
+    this.railHintT = now;
+    const card = $('card');
+    card.innerHTML = '<div class="sign rail">🛹 ¡Salta a la baranda y MANTÉN presionado!</div>';
+    clearTimeout(this.signTimer);
+    this.signTimer = setTimeout(() => { if (card.querySelector('.sign')) card.innerHTML = ''; }, 2200);
+    game.players.forEach((p) => this.sendTo(p, { t: 'hint', text: '🛹 ¡Baranda! Salta y MANTÉN presionado' }));
+  },
   preparing(on) {
     const card = $('card');
     if (on) card.innerHTML = '<div class="title-card small" style="color:#fff">Preparando…</div>';

@@ -75,3 +75,4 @@ input { display: block; width: 100%; margin-top: 4px; font-family: var(--ui); fo
   .meow { width: 30%; }
   .logo { font-size: 20px; }
 }
+.hint { margin-top: 8px; background: #2b33a8; color: var(--yellow); border: 3px solid var(--ink); border-radius: 12px; padding: 6px 10px; text-align: center; font-size: 17px; box-shadow: 3px 3px 0 var(--ink); -webkit-animation: pop .3s; animation: pop .3s; }

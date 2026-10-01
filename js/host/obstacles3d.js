@@ -216,3 +216,58 @@ export function buildHitboxMesh(prims, depth) {
   });
   return g;
 }
+
+// ---------------------------------------------------------------------
+//  BARANDA para patinar: se arma por tramos cortos que siguen la curva de
+//  la cabeza (cada tramo se ubica en su propia posición del arco).
+//  dx = distancia del tramo al frente de la baranda (en el sentido de s).
+//  Los postes y pinchos usan las mismas medidas que su hitbox (railPrims).
+// ---------------------------------------------------------------------
+export function buildRailParts(ev, depth, PHYS) {
+  const parts = [];
+  const L = ev.railL, dir = ev.dir;
+  const metal = new THREE.MeshToonMaterial({ color: 0xc9ced8, gradientMap: toonGradient() });
+  const metalDark = new THREE.MeshToonMaterial({ color: 0x6b7280, gradientMap: toonGradient() });
+  const stripe = stripeTex('railStripe', '#141414', '#ffe600', 8, true);
+  const spikeMat = new THREE.MeshToonMaterial({ map: stripeTex('spike', '#d81e2b', '#fff3d6', 6, true), gradientMap: toonGradient() });
+  const segLen = 0.55;
+  const n = Math.max(2, Math.ceil(L / segLen));
+  const step = L / n;
+  for (let k = 0; k < n; k++) {
+    const g = new THREE.Group();
+    // barra (dos tubos: adelante y atrás de la rueda) + travesaño
+    for (const z of [depth * 0.33, -depth * 0.33]) {
+      const bar = new THREE.CylinderGeometry(0.075, 0.075, step + 0.02, 10);
+      bar.rotateZ(Math.PI / 2); bar.translate(0, PHYS.RAIL_H - 0.075, z);
+      add(g, bar, metal, 0.02);
+    }
+    const plank = new THREE.BoxGeometry(step + 0.01, 0.07, depth * 0.66);
+    plank.translate(0, PHYS.RAIL_H - 0.05, 0);
+    add(g, plank, new THREE.MeshToonMaterial({ map: stripe, gradientMap: toonGradient() }), 0.015);
+    // pinchos debajo (fila a lo ancho) — coinciden con los pinchos del hitbox
+    {
+      const m = 4;
+      for (let i = 0; i < m; i++) {
+        const cone = new THREE.ConeGeometry(step / 2, PHYS.SPIKE_H, 8);
+        cone.translate(0, PHYS.SPIKE_H / 2, -depth / 2 + (i + 0.5) * (depth / m));
+        g.add(new THREE.Mesh(cone, spikeMat));
+      }
+    }
+    parts.push({ mesh: g, dx: -dir * (k + 0.5) * step });
+  }
+  // postes en los extremos
+  for (const dx of [0, -dir * L]) {
+    const g = new THREE.Group();
+    for (const z of [depth * 0.33, -depth * 0.33]) {
+      const post = new THREE.BoxGeometry(PHYS.POST_HW * 2, PHYS.RAIL_H, 0.16);
+      post.translate(0, PHYS.RAIL_H / 2, z);
+      add(g, post, metalDark, 0.02);
+    }
+    const cap = new THREE.SphereGeometry(0.11, 10, 8); cap.translate(0, PHYS.RAIL_H, depth * 0.33);
+    add(g, cap, new THREE.MeshToonMaterial({ color: 0xd81e2b, gradientMap: toonGradient() }), 0.015);
+    const cap2 = cap.clone(); cap2.translate(0, 0, -depth * 0.66);
+    add(g, cap2, new THREE.MeshToonMaterial({ color: 0xd81e2b, gradientMap: toonGradient() }), 0.015);
+    parts.push({ mesh: g, dx });
+  }
+  return parts;
+}

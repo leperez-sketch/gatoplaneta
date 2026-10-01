@@ -192,10 +192,11 @@
     if (d.t === 'state') { setPhase(d.phase, d.alive !== false, d); return; }
     if (d.t === 'judge') {
       var txt = d.j === 'perfect' ? '¡PERFECTO!' : d.j === 'great' ? '¡GENIAL!' : 'BIEN';
-      judge(txt + (d.combo > 1 ? ' x' + d.combo : ''), d.score);
+      judge(d.sl ? d.sl : txt + (d.combo > 1 ? ' x' + d.combo : ''), d.score);
       if (d.j === 'perfect') vibrate(8);
       return;
     }
+    if (d.t === 'hint') { hint(d.text); vibrate([20, 30, 20]); return; }
     if (d.t === 'ko') { vibrate([80, 40, 160]); me.alive = false; setPhase('ko', false, d); return; }
     if (d.t === 'kicked') { fatalMsg('Fuera del reparto', 'La pantalla te sacó de la sala.', true); return; }
     if (d.t === 'full') { fatalMsg('Sala llena', 'Ya no caben más artistas en esta función.', true); return; }
@@ -230,6 +231,13 @@
     }
   }
 
+  var hintTimer = null;
+  function hint(text) {
+    var h = $('hint');
+    h.textContent = text; h.classList.remove('hidden');
+    clearTimeout(hintTimer); hintTimer = setTimeout(function () { h.classList.add('hidden'); }, 2400);
+  }
+
   function judge(text, score) {
     var el = $('judge-text');
     el.textContent = text;
@@ -238,19 +246,30 @@
   }
 
   // ------------------------------------------------------------- botones
+  // Cada dedo nuevo cuenta como un toque (doble salto con dos dedos funciona);
+  // "soltar" se envía solo cuando ya no queda ningún dedo sobre el botón.
   function bindPress(el, fn, upFn) {
-    var down = false;
-    function start(e) { if (e && e.cancelable) e.preventDefault(); if (down) return; down = true; el.classList.add('down'); fn(); }
-    function end(e) { if (e && e.cancelable) e.preventDefault(); down = false; el.classList.remove('down'); if (upFn) upFn(); }
+    var active = 0;
+    function start(e) { if (e && e.cancelable) e.preventDefault(); active++; el.classList.add('down'); fn(); }
+    function endTouch(e) {
+      if (e && e.cancelable) e.preventDefault();
+      var left = 0;
+      if (e && e.targetTouches) left = e.targetTouches.length;
+      active = left;
+      if (active <= 0) { active = 0; el.classList.remove('down'); if (upFn) upFn(); }
+    }
+    function endPtr(e) { active = Math.max(0, active - 1); if (active === 0) { el.classList.remove('down'); if (upFn) upFn(); } }
     if ('ontouchstart' in window) {
       el.addEventListener('touchstart', start, { passive: false });
-      el.addEventListener('touchend', end, { passive: false });
-      el.addEventListener('touchcancel', end, { passive: false });
+      el.addEventListener('touchend', endTouch, { passive: false });
+      el.addEventListener('touchcancel', endTouch, { passive: false });
     } else if (window.PointerEvent) {
       el.addEventListener('pointerdown', start);
-      el.addEventListener('pointerup', end);
-      el.addEventListener('pointerleave', end);
+      el.addEventListener('pointerup', endPtr);
+      el.addEventListener('pointercancel', endPtr);
+      el.addEventListener('pointerleave', function () { if (active) { active = 0; el.classList.remove('down'); if (upFn) upFn(); } });
     } else {
+      var end = function () { active = 0; el.classList.remove('down'); if (upFn) upFn(); };
       el.addEventListener('mousedown', start);
       el.addEventListener('mouseup', end);
     }
@@ -261,6 +280,8 @@
     requestWakeLock();
     send({ t: 'jump', c: now(), s: ++seq });
     vibrate(12);
+  }, function () {
+    send({ t: 'up', c: now() });
   });
   bindPress($('btn-meow'), function () {
     send({ t: 'meow' });
@@ -271,6 +292,10 @@
     } catch (e) {}
   });
   // teclado (por si se juega desde un PC/tablet con teclado)
+  document.addEventListener('keyup', function (e) {
+    if (e.target && e.target.tagName === 'INPUT') return;
+    if (e.keyCode === 32 || e.keyCode === 38) send({ t: 'up', c: now() });
+  });
   document.addEventListener('keydown', function (e) {
     if (e.target && e.target.tagName === 'INPUT') return;
     if (e.keyCode === 32 || e.keyCode === 38) { e.preventDefault(); if (!e.repeat) send({ t: 'jump', c: now(), s: ++seq }); }
